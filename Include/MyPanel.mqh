@@ -88,6 +88,7 @@ void CMyPanel::OnClickButton(void)
 void OnEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
 {
    // Pass all chart events to the UI class
+   Print("Event received in MyPanel.mqh ", sparam);
    OnEvent(id, lparam, dparam, sparam);
 }
 // ... (Rest of the helper functions) ...
