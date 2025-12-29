@@ -19,6 +19,11 @@ input int StopLoss = 50;            // Stop loss in points
 input int TakeProfit = 100;         // Take profit in points
 input bool ClearAllObjectsOnStart = false; // Clear all chart objects when EA starts
 
+//--- Input separator
+input string Separator1 = "=================="; // --- Drawing Settings ---
+input int PanelWidth = 400;        // Width of the control panel
+input int PanelHeight = 200;       // Height of the control panel
+
 //--- Global variables
 string line_prefix = "LA_HighLowClose_";  // Prefix for line object names
 #include <Trade/Trade.mqh>          // Include trading library
@@ -41,12 +46,15 @@ void DebugPrint(string message)
 //+------------------------------------------------------------------+
 int OnInit()
 {
-  if(!MyUI.Create(0, "ControlPanel", 0, 50, 50, 300, 250))
+  if(!MyUI.Create(0, "LA Backtest", 0, 350, 20, PanelWidth, PanelHeight))
     return INIT_FAILED;
-    
-  MyUI.Run();
+  
+  MyUI.txtS1Days.Text(IntegerToString(DaysToShow));
 
-  Draw_S1_Lines(D'2025.12.26', 10); // Example date and previous days
+  MyUI.Run();
+  
+
+  // Draw_S1_Lines(D'2025.12.29', 10); // Example date and previous days
 
   Print("-OnInit()");
   return INIT_SUCCEEDED;
@@ -67,11 +75,33 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
   // Pass all chart events to the UI class
   if(id == CHARTEVENT_OBJECT_CLICK)
   {
-    Print("Chart event: CLICK at X=" + IntegerToString(lparam) + ", Y=" + IntegerToString((long)dparam) + ", Object: " + sparam );
+    if(sparam == "btnPrev")
+    {
+      datetime currentDate = StringToTime(MyUI.txtDate.Text());
+      datetime previousDate = GetPreviousTradingDay(currentDate);
+      MyUI.txtDate.Text( TimeToString(previousDate, TIME_DATE));
+      RemoveAllLines();
+      Draw_S1_Lines(previousDate, DaysToShow);
+    }
+    else if(sparam == "btnNext")
+    {
+      datetime currentDate = StringToTime(MyUI.txtDate.Text());
+      datetime nextDate = GetNextTradingDay(currentDate);
+      MyUI.txtDate.Text( TimeToString(nextDate, TIME_DATE));
+      RemoveAllLines();
+      Draw_S1_Lines(nextDate, DaysToShow);
+    }
+    else if(sparam == "btnSetDate")
+    {
+      datetime setDate = StringToTime(MyUI.txtDate.Text());
+      RemoveAllLines();
+      Draw_S1_Lines(setDate, DaysToShow);
+    }
+    // Print("Chart event: CLICK at X=" + IntegerToString(lparam) + ", Y=" + IntegerToString((long)dparam) + ", Object: " + sparam );
   }
   else if(id == CHARTEVENT_OBJECT_CHANGE)
   {
-    DebugPrint("Chart event: OBJECT CHANGE - Object: " + sparam);
+    Print("Chart event: OBJECT CHANGE - Object: " + sparam);
   }
   else
   {
@@ -453,6 +483,10 @@ void Draw_Line(double price, string desc, int style)
       ObjectSetInteger(0, line_name, OBJPROP_BACK, true); // Draw line in background
       ObjectSetString(0, line_name, OBJPROP_TEXT, line_name);
       
+      // Ensure it doesn't get in the way of clicking bars
+      ObjectSetInteger(0, line_name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, line_name, OBJPROP_SELECTED, false);
+
       // Print("✓ Created line.");
    }
    else
@@ -490,6 +524,10 @@ void DrawVerticalLine(const datetime time)
    
    // 3. Hide name in the background (optional)
    ObjectSetInteger(0, name, OBJPROP_BACK, true);
+
+  // Ensure it doesn't get in the way of clicking bars
+  ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+  ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
    
    // 4. Force a chart refresh to show the change immediately
    ChartRedraw(0);
@@ -578,4 +616,49 @@ datetime SubtractOneDay(const datetime source_time)
 datetime AddOneDay(const datetime source_time)
 {
    return (source_time + 86400);
+}
+
+datetime GetPreviousTradingDay(datetime source_time)
+{
+   datetime prev_day = SubtractOneDay(source_time);
+   MqlRates rates[];
+   int total = GetBarsByDate(_Symbol, PERIOD_D1, prev_day, rates);
+   
+   while(total == 0)
+   {
+      //no bars found, go back one more day
+      prev_day = SubtractOneDay(prev_day);
+      total = GetBarsByDate(_Symbol, PERIOD_D1, prev_day, rates);
+   }
+   
+   return prev_day;
+}
+
+datetime GetNextTradingDay(datetime source_time)
+{
+  datetime next_day = AddOneDay(source_time);
+  datetime current_server_time = TimeCurrent();
+  
+  if(next_day > current_server_time)
+  {
+    return source_time;
+  }
+  
+  MqlRates rates[];
+  int total = GetBarsByDate(_Symbol, PERIOD_D1, next_day, rates);
+  
+  while(total == 0)
+  {
+    //no bars found, go forward one more day
+    next_day = AddOneDay(next_day);
+    
+    if(next_day > current_server_time)
+    {
+      return source_time;
+    }
+    
+    total = GetBarsByDate(_Symbol, PERIOD_D1, next_day, rates);
+  }
+  
+  return next_day;
 }
