@@ -8,7 +8,7 @@
 #property version   "1.00"
 
 //--- Input parameters
-input int DaysToShow = 5;           // Number of days to show lines for
+int DaysToShow = 5;           // Number of days to show lines for
 input color LineColor = clrBlue;    // Color of the horizontal lines
 input int LineWidth = 1;            // Width of the lines
 input ENUM_LINE_STYLE LineStyle = STYLE_SOLID; // Style of the lines
@@ -52,7 +52,7 @@ int OnInit()
   MyUI.txtS1Days.Text(IntegerToString(DaysToShow));
 
   MyUI.Run();
-  
+  ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
 
   // Draw_S1_Lines(D'2025.12.29', 10); // Example date and previous days
 
@@ -95,6 +95,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
     {
       datetime setDate = StringToTime(MyUI.txtDate.Text());
       RemoveAllLines();
+      DaysToShow = StringToInteger(MyUI.txtS1Days.Text());
       Draw_S1_Lines(setDate, DaysToShow);
     }
     // Print("Chart event: CLICK at X=" + IntegerToString(lparam) + ", Y=" + IntegerToString((long)dparam) + ", Object: " + sparam );
@@ -102,6 +103,51 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
   else if(id == CHARTEVENT_OBJECT_CHANGE)
   {
     Print("Chart event: OBJECT CHANGE - Object: " + sparam);
+  }
+  else if(id == CHARTEVENT_MOUSE_MOVE)
+  {
+    // 1. Static variable to store the 'state' of the last bar we processed
+      static datetime last_processed_bar_time = 0;
+      
+      int x = (int)lparam;
+      int y = (int)dparam;
+      datetime current_mouse_time;
+      double price;
+      int sub_window;
+      
+      // 2. Convert pixels to Time/Price
+      if(ChartXYToTimePrice(0, x, y, sub_window, current_mouse_time, price))
+      {
+         // 3. Find the start time of the bar under the mouse
+         int bar_index = iBarShift(_Symbol, _Period, current_mouse_time, false);
+         datetime bar_start_time = iTime(_Symbol, _Period, bar_index);
+
+         // --- THE THROTTLER ---
+         // If we are still over the same bar, exit immediately
+         if(bar_start_time == last_processed_bar_time) 
+         {
+            MyUI.ChartEvent(id, lparam, dparam, sparam);
+            return;
+         }
+         
+         // Update the state for the next move
+         last_processed_bar_time = bar_start_time;
+         // ---------------------
+
+         // 4. Heavy logic only runs when the mouse moves to a NEW bar
+         MqlRates bar;
+         if(GetBarUnderMouse(x, y, bar))
+         {
+            PrintFormat("New bar detected: %s | High: %.5f", 
+                        TimeToString(bar.time), bar.high);
+            
+            string bar_info = StringFormat("[%s] Body: %d O: %.2f C: %.2f", 
+                                          FormatTime(bar.time), BarBodySize(bar),
+                                          bar.open, bar.close);
+            MyUI.lblBarInfo.Text(bar_info);
+            ChartRedraw(0);
+         }
+      }
   }
   else
   {
@@ -528,6 +574,21 @@ void DrawVerticalLine(const datetime time)
   // Ensure it doesn't get in the way of clicking bars
   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
   ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
+
+  // 3. Find the bar index for this time
+   // exact = false allows it to find the nearest bar if 01:00 doesn't have a bar
+   int barIndex = iBarShift(_Symbol, _Period, startOfDay, false);
+
+   if(barIndex != -1)
+   {
+      // 4. Disable Auto-scroll (otherwise MT5 snaps back to the current tick)
+      ChartSetInteger(0, CHART_AUTOSCROLL, false);
+
+      // 5. Navigate to the bar. 
+      // CHART_END + negative index moves the view back into history.
+      // We add a small offset (e.g., 10 bars) so the line isn't stuck to the very edge.
+      ChartNavigate(0, CHART_END, -(barIndex + 10));
+   }
    
    // 4. Force a chart refresh to show the change immediately
    ChartRedraw(0);
@@ -661,4 +722,57 @@ datetime GetNextTradingDay(datetime source_time)
   }
   
   return next_day;
+}
+
+//+------------------------------------------------------------------+
+//| Get bar details under specific pixel coordinates                 |
+//+------------------------------------------------------------------+
+bool GetBarUnderMouse(int x, int y, MqlRates &bar_details)
+{
+   datetime time;
+   double price;
+   int sub_window;
+
+   // 1. Convert pixels to Time and Price
+   if(!ChartXYToTimePrice(0, x, y, sub_window, time, price))
+      return false;
+
+   // 2. Find the index of the bar at that time
+   // exact = false finds the bar the mouse is "over" even if not pixel-perfect
+   int bar_index = iBarShift(_Symbol, _Period, time, false);
+
+   if(bar_index == -1) return false;
+
+   // 3. Copy the bar data into the struct
+   MqlRates rates[];
+   if(CopyRates(_Symbol, _Period, bar_index, 1, rates) > 0)
+   {
+      bar_details = rates[0];
+      return true;
+   }
+
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Format datetime to YY.MM.DD HH                                   |
+//+------------------------------------------------------------------+
+string FormatTime(datetime time)
+{
+   MqlDateTime dt;
+   TimeToStruct(time, dt);
+   
+   // dt.year % 100 gives us the last two digits (e.g., 2025 -> 25)
+   // %02d ensures leading zeros (e.g., 5 -> 05)
+   return StringFormat("%d.%02d.%02d %02d:%02d", 
+                       dt.year, 
+                       dt.mon, 
+                       dt.day, 
+                       dt.hour,
+                       dt.min);
+}
+
+int BarBodySize(const MqlRates &bar)
+{
+   return (int)MathAbs((bar.close - bar.open) * 100);
 }

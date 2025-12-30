@@ -16,7 +16,7 @@ public:
    int panel_left;
    CButton btnPrev, btnNext, btnSetDate;
    CEdit txtDate, txtS1Days;
-   CLabel    lblDate, lblDays;
+   CLabel    lblDate, lblDays, lblBarInfo;
    // CEdit     m_edit;
    CButton   m_button;
 
@@ -66,10 +66,12 @@ bool CMyPanel::Create(const long chart, const string name, const int subwin, con
    if(!CreateButton(btnNext, "Next", ">", GetX2(txtDate) + 5, 10, 20, 30)) return false;
    if(!CreateButton(btnSetDate, "SetDate", "Set", GetX2(btnNext) + 5, 10, 40, 30)) return false;
 
-   if(!CreateLabel(lblDays, "DaysS1", "S1 Days", 10, 45, 40, 30)) return false;
+   if(!CreateLabel(lblDays, "DaysS1", "S1 Days", 10, 47, 40, 30)) return false;
    if(!CreateEdit(txtS1Days, "DaysToShow", GetX1(btnPrev), 45, 35, 30, ""))   return false;
 
-
+   if(!CreateLabel(lblBarInfo, "BarInfo", "Bar [----]", 10, 80, 40, 30)) return false;
+   lblBarInfo.FontSize(8);
+   lblBarInfo.Font("Trebuchet MS");
    return true;
 }
 
