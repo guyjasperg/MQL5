@@ -138,8 +138,8 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          MqlRates bar;
          if(GetBarUnderMouse(x, y, bar))
          {
-            PrintFormat("New bar detected: %s | High: %.5f", 
-                        TimeToString(bar.time), bar.high);
+            // PrintFormat("New bar detected: %s | High: %.5f", 
+            //             TimeToString(bar.time), bar.high);
             
             string bar_info = StringFormat("[%s] Body: %d O: %.2f C: %.2f", 
                                           FormatTime(bar.time), BarBodySize(bar),
@@ -474,7 +474,7 @@ void Draw_S1_Lines(datetime targetDate, int prevDays)
 
    if(prevDays > 0)
    {
-      //raw S1 lines from n previous days
+      //Draw S1 lines from n previous days
       int count = prevDays;
       
       datetime currentDay = prevday;
@@ -493,6 +493,7 @@ void Draw_S1_Lines(datetime targetDate, int prevDays)
             price = GetLowestBodyPrice(dayBars, index);
             desc = "Low_" + TimeToString(prevDay, TIME_DATE);
             Draw_Line(price, desc, 1);
+            DrawPeriodDetails(prevDay); 
          
             count = count - 1;
          } 
@@ -614,8 +615,10 @@ void DrawPeriodDetails(const datetime targetdate)
 
    if(bars == 0)
    {
+      // Print("+DrawPeriodDetails() No bars found for PDR calculation on date: " + TimeToString(targetdate, TIME_DATE));
       return;
    }
+   // Print("+DrawPeriodDetails() Calculating PDR for date: " + TimeToString(targetdate, TIME_DATE));
 
    int pdr_rate = (GetHighestBodyPrice(rates, bars) - GetLowestBodyPrice(rates, bars)) * 100;
 
@@ -640,7 +643,7 @@ void DrawPeriodLabel(const datetime targetdate, const string text, double price)
    datetime middleTime = StructToTime(dt) + 43200; 
 
    string name = line_prefix + "_Label_" + TimeToString(targetdate, TIME_DATE);
-
+   // Print("+DrawPeriodLabel(): Drawing label '" + text + "' at " + TimeToString(middleTime) + " Price: " + DoubleToString(price, _Digits));
    // 3. Create or Move the Text Object
    if(!ObjectCreate(0, name, OBJ_TEXT, 0, middleTime, price))
    {
