@@ -25,10 +25,12 @@ input int PanelWidth = 400;                     // Width of the control panel
 input int PanelHeight = 200;                    // Height of the control panel
 
 //--- Global variables
-string line_prefix = "LA_HighLowClose_"; // Prefix for line object names
 #include <Trade/Trade.mqh>               // Include trading library
 #include "../../Include/MyPanel.mqh"     // Path relative to MQL5\Include
+#include <Arrays\ArrayLong.mqh>
 
+string line_prefix = "LA_HighLowClose_"; // Prefix for line object names
+CArrayLong notified_deals; // Array to track notified deals
 CTrade trade; // Trade object
 CMyPanel MyUI;
 
@@ -57,7 +59,7 @@ int OnInit()
    // Draw_S1_Lines(D'2025.12.29', 10); // Example date and previous days
    datetime setDate = StringToTime(MyUI.txtDate.Text());
    RemoveAllLines();
-   DaysToShow = StringToInteger(MyUI.txtS1Days.Text());
+   DaysToShow = (int)StringToInteger(MyUI.txtS1Days.Text());
    Draw_S1_Lines(setDate, DaysToShow);
 
    Print("-OnInit()");
@@ -99,7 +101,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       {
          datetime setDate = StringToTime(MyUI.txtDate.Text());
          RemoveAllLines();
-         DaysToShow = StringToInteger(MyUI.txtS1Days.Text());
+         DaysToShow = (int)StringToInteger(MyUI.txtS1Days.Text());
          Draw_S1_Lines(setDate, DaysToShow);
       }
       // Print("Chart event: CLICK at X=" + IntegerToString(lparam) + ", Y=" + IntegerToString((long)dparam) + ", Object: " + sparam );
@@ -456,7 +458,7 @@ void Draw_S1_Lines(datetime targetDate, int prevDays)
    }
 
    int index = 0;
-   double price, high_price, low_price = 0.0;
+   double high_price, low_price = 0.0;
    string desc = "";
 
    if (total > 0)
@@ -670,7 +672,7 @@ void DrawPeriodDetails(const datetime targetdate)
    }
    // Print("+DrawPeriodDetails() Calculating PDR for date: " + TimeToString(targetdate, TIME_DATE));
 
-   int pdr_rate = (GetHighestBodyPrice(rates, bars) - GetLowestBodyPrice(rates, bars)) * 100;
+   int pdr_rate = (int)(GetHighestBodyPrice(rates, bars) - GetLowestBodyPrice(rates, bars)) * 100;
 
    // Draw PDR below lowest price
    //  double lowprice = GetLowestBodyPrice(rates, bars);
@@ -898,4 +900,63 @@ string GetDayName(datetime time)
       return "Unknown";
 
    return dayNames[dt.day_of_week];
+}
+
+//+------------------------------------------------------------------+
+//| TradeTransaction function                                        |
+//+------------------------------------------------------------------+
+void OnTradeTransaction(const MqlTradeTransaction &trans,
+                        const MqlTradeRequest &request,
+                        const MqlTradeResult &result)
+{
+   // 1. We look for 'TRADE_TRANSACTION_HISTORY_ADD' 
+   // This indicates a deal has been moved to history (a fill or a close)
+   if(trans.type == TRADE_TRANSACTION_HISTORY_ADD)
+   {
+      ProcessClosedNotification(trans.deal);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Helper to filter and send notification                           |
+//+------------------------------------------------------------------+
+void ProcessClosedNotification(ulong deal_id)
+{
+   // 2. Check if we already notified this specific Deal ID
+   if(notified_deals.SearchLinear(deal_id) != -1)
+      return; // Already sent, exit.
+
+   // 3. Select the deal from history to verify it's a "Close"
+   if(HistoryDealSelect(deal_id))
+   {
+      long entry = HistoryDealGetInteger(deal_id, DEAL_ENTRY);
+      
+      // We only care about DEAL_ENTRY_OUT (Close) or DEAL_ENTRY_INOUT (Reverse)
+      if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT)
+      {
+         string symbol = HistoryDealGetString(deal_id, DEAL_SYMBOL);
+         double profit = HistoryDealGetDouble(deal_id, DEAL_PROFIT);
+         double commission = HistoryDealGetDouble(deal_id, DEAL_COMMISSION);
+         double swap = HistoryDealGetDouble(deal_id, DEAL_SWAP);
+         double net_profit = profit + commission + swap;
+
+         // 4. Construct the message
+         string msg = StringFormat("Order Closed: %s\nID: %I64u\nNet Profit: %.2f", 
+                                   symbol, deal_id, net_profit);
+
+         // 5. Send Push Notification
+         if(SendNotification(msg))
+         {
+            // 6. Add to list so we don't send it again
+            notified_deals.Add(deal_id);
+            notified_deals.Sort(); // Keep sorted for faster searching if list grows
+            
+            Print("Notification sent for Deal: ", deal_id);
+         }
+         else
+         {
+            Print("Failed to send notification. Error: ", GetLastError());
+         }
+      }
+   }
 }
