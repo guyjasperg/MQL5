@@ -25,13 +25,13 @@ input int PanelWidth = 400;                     // Width of the control panel
 input int PanelHeight = 200;                    // Height of the control panel
 
 //--- Global variables
-#include <Trade/Trade.mqh>               // Include trading library
-#include "../../Include/MyPanel.mqh"     // Path relative to MQL5\Include
+#include <Trade/Trade.mqh>           // Include trading library
+#include "../../Include/MyPanel.mqh" // Path relative to MQL5\Include
 #include <Arrays\ArrayLong.mqh>
 
 string line_prefix = "LA_HighLowClose_"; // Prefix for line object names
-CArrayLong notified_deals; // Array to track notified deals
-CTrade trade; // Trade object
+CArrayLong notified_deals;               // Array to track notified deals
+CTrade trade;                            // Trade object
 CMyPanel MyUI;
 
 //+------------------------------------------------------------------+
@@ -144,12 +144,21 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          MqlRates bar;
          if (GetBarUnderMouse(x, y, bar))
          {
-            // PrintFormat("New bar detected: %s | High: %.5f",
-            //             TimeToString(bar.time), bar.high);
-
-            string bar_info = StringFormat("[%s] Body: %d O: %.2f C: %.2f",
-                                           FormatTime(bar.time), BarBodySize(bar),
-                                           bar.open, bar.close);
+            int bo_percent = BreakoutTest(bar_start_time, bar);
+            Print("bo_percent: ", bo_percent);
+            string bar_info = "";
+            if (bo_percent > 0)
+            {
+               if(bo_percent > 100) bo_percent = 100; // Cap at 100%
+               bar_info = StringFormat("[%s] Body: %d BO %d%%",
+                                       FormatTime(bar.time), BarBodySize(bar),
+                                       bo_percent);
+            }
+            else
+            {
+               bar_info = StringFormat("[%s] Body: %d",
+                                       FormatTime(bar.time), BarBodySize(bar));
+            }
             MyUI.lblBarInfo.Text(bar_info);
             ChartRedraw(0);
          }
@@ -909,9 +918,9 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
                         const MqlTradeRequest &request,
                         const MqlTradeResult &result)
 {
-   // 1. We look for 'TRADE_TRANSACTION_HISTORY_ADD' 
+   // 1. We look for 'TRADE_TRANSACTION_HISTORY_ADD'
    // This indicates a deal has been moved to history (a fill or a close)
-   if(trans.type == TRADE_TRANSACTION_HISTORY_ADD)
+   if (trans.type == TRADE_TRANSACTION_HISTORY_ADD)
    {
       ProcessClosedNotification(trans.deal);
    }
@@ -923,16 +932,16 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 void ProcessClosedNotification(ulong deal_id)
 {
    // 2. Check if we already notified this specific Deal ID
-   if(notified_deals.SearchLinear(deal_id) != -1)
+   if (notified_deals.SearchLinear(deal_id) != -1)
       return; // Already sent, exit.
 
    // 3. Select the deal from history to verify it's a "Close"
-   if(HistoryDealSelect(deal_id))
+   if (HistoryDealSelect(deal_id))
    {
       long entry = HistoryDealGetInteger(deal_id, DEAL_ENTRY);
-      
+
       // We only care about DEAL_ENTRY_OUT (Close) or DEAL_ENTRY_INOUT (Reverse)
-      if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT)
+      if (entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT)
       {
          string symbol = HistoryDealGetString(deal_id, DEAL_SYMBOL);
          double profit = HistoryDealGetDouble(deal_id, DEAL_PROFIT);
@@ -941,16 +950,16 @@ void ProcessClosedNotification(ulong deal_id)
          double net_profit = profit + commission + swap;
 
          // 4. Construct the message
-         string msg = StringFormat("Order Closed: %s\nID: %I64u\nNet Profit: %.2f", 
+         string msg = StringFormat("Order Closed: %s\nID: %I64u\nNet Profit: %.2f",
                                    symbol, deal_id, net_profit);
 
          // 5. Send Push Notification
-         if(SendNotification(msg))
+         if (SendNotification(msg))
          {
             // 6. Add to list so we don't send it again
             notified_deals.Add(deal_id);
             notified_deals.Sort(); // Keep sorted for faster searching if list grows
-            
+
             Print("Notification sent for Deal: ", deal_id);
          }
          else
@@ -959,4 +968,53 @@ void ProcessClosedNotification(ulong deal_id)
          }
       }
    }
+}
+
+int BreakoutTest(datetime targetdate, MqlRates &bar)
+{
+   Print("+BreakoutTest(): Date = ", TimeToString(targetdate, TIME_DATE));
+   MqlRates dayBars[];
+   MqlDateTime dt;
+   TimeToStruct(bar.time, dt);
+   dt.hour = 0;
+   dt.min = 0;
+   dt.sec = 0;
+   datetime bar_start_time = StructToTime(dt);
+
+   // S1 lines for target date will start from previous day
+   datetime prevday = SubtractOneDay(bar_start_time);
+   int total = GetBarsByDate(_Symbol, PERIOD_H1, prevday, dayBars);
+
+   while (total == 0)
+   {
+      // no bars found, go back one more day
+      prevday = SubtractOneDay(prevday);
+      total = GetBarsByDate(_Symbol, PERIOD_H1, prevday, dayBars);
+   }
+
+   int high_price = (int)GetHighestBodyPrice(dayBars, total) * 100;
+   int low_price = (int)GetLowestBodyPrice(dayBars, total) * 100;
+   int bar_high_price = (int)(bar.close > bar.open ? bar.close * 100 : bar.open * 100);
+   int bar_low_price = (int)(bar.open > bar.close ? bar.close * 100 : bar.open * 100);
+   
+   // Print("BreakoutTest - high_price: ", high_price, " low_price: ", low_price);
+   // Print("BreakoutTest - bar_high_price: ", bar_high_price, " bar_low_price: ", bar_low_price);
+   double bar_body = MathAbs((bar.close - bar.open) * 100);
+   
+   if (bar_high_price > high_price)
+   {
+      double breakout_amount = bar_high_price - high_price;
+      int breakout_percent = (int)((breakout_amount / bar_body) * 100);
+      // Print("breakout_percent: ", IntegerToString(breakout_percent));
+      // Print("Breakout Amount: ", IntegerToString(breakout_amount), " Body: ", bar_body);
+      return (int)breakout_percent; // Return bullish breakout percentage
+   }
+   else if (bar_low_price < low_price)
+   {
+      double breakout_amount = MathAbs(bar_low_price - low_price);
+      int breakout_percent = (int)((breakout_amount / bar_body) * 100);
+      return (int)breakout_percent; // Return bearish breakout percentage (negative)
+   }
+   else
+      return 0; // No Breakout
 }
