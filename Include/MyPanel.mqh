@@ -14,7 +14,7 @@ class CMyPanel : public CAppDialog
 {
 public:
    int panel_left;
-   CButton btnPrev, btnNext, btnSetDate;
+   CButton btnPrev, btnNext, btnSetDate, btnCurrentDate;
    CEdit txtDate, txtS1Days;
    CLabel lblDate, lblDays, lblBarInfo;
    // CEdit     m_edit;
@@ -65,11 +65,13 @@ bool CMyPanel::Create(const long chart, const string name, const int subwin, con
    Print("Created Prev Button at X=", GetX1(btnPrev), " Y=", btnPrev.Top());
 
    datetime now = TimeCurrent();
-   if (!CreateEdit(txtDate, "Date", GetX2(btnPrev) + 5, 10, 190, 30, TimeToString(now, TIME_DATE)))
+   if (!CreateEdit(txtDate, "Date", GetX2(btnPrev) + 5, 10, 150, 30, TimeToString(now, TIME_DATE)))
       return false;
    if (!CreateButton(btnNext, "Next", ">", GetX2(txtDate) + 5, 10, 20, 30))
       return false;
-   if (!CreateButton(btnSetDate, "SetDate", "Set", GetX2(btnNext) + 5, 10, 40, 30))
+   if (!CreateButton(btnCurrentDate, "CurrentDate", ">>", GetX2(btnNext) + 5, 10, 20, 30))
+      return false;
+   if (!CreateButton(btnSetDate, "SetDate", "Set", GetX2(btnCurrentDate) + 5, 10, 50, 30))
       return false;
 
    if (!CreateLabel(lblDays, "DaysS1", "S1 Days", 10, 47, 40, 30))

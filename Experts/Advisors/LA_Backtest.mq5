@@ -8,7 +8,7 @@
 #property version "1.00"
 
 //--- Input parameters
-int DaysToShow = 5;                            // Number of days to show lines for
+int DaysToShow = 7;                            // Number of days to show lines for
 input color LineColor = clrBlue;               // Color of the horizontal lines
 input int LineWidth = 1;                       // Width of the lines
 input ENUM_LINE_STYLE LineStyle = STYLE_SOLID; // Style of the lines
@@ -23,6 +23,7 @@ input bool ClearAllObjectsOnStart = false;     // Clear all chart objects when E
 input string Separator1 = "=================="; // --- Drawing Settings ---
 input int PanelWidth = 400;                     // Width of the control panel
 input int PanelHeight = 200;                    // Height of the control panel
+input int LowPDR = 4000;
 
 //--- Global variables
 #include <Trade/Trade.mqh>           // Include trading library
@@ -103,6 +104,14 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          RemoveAllLines();
          DaysToShow = (int)StringToInteger(MyUI.txtS1Days.Text());
          Draw_S1_Lines(setDate, DaysToShow);
+      }
+      else if (sparam == "btnCurrentDate")
+      {
+         datetime now = TimeCurrent();
+         MyUI.txtDate.Text(TimeToString(now, TIME_DATE));
+         RemoveAllLines();
+         DaysToShow = (int)StringToInteger(MyUI.txtS1Days.Text());
+         Draw_S1_Lines(now, DaysToShow);
       }
       // Print("Chart event: CLICK at X=" + IntegerToString(lparam) + ", Y=" + IntegerToString((long)dparam) + ", Object: " + sparam );
    }
@@ -876,7 +885,7 @@ void DrawBoxDaily(datetime date, double y_high, double y_low)
 
    // 4. Set Visual Properties
    double pdr = (y_high - y_low) * 100;
-   if (pdr < 5000)
+   if (pdr < LowPDR)
       ObjectSetInteger(0, name, OBJPROP_COLOR, clrGold);
    else
       ObjectSetInteger(0, name, OBJPROP_COLOR, clrMistyRose);
@@ -992,13 +1001,13 @@ int BreakoutTest(datetime targetdate, MqlRates &bar)
       total = GetBarsByDate(_Symbol, PERIOD_H1, prevday, dayBars);
    }
 
-   int high_price = (int)GetHighestBodyPrice(dayBars, total) * 100;
-   int low_price = (int)GetLowestBodyPrice(dayBars, total) * 100;
+   int high_price = (int)(GetHighestBodyPrice(dayBars, total) * 100);
+   int low_price = (int)(GetLowestBodyPrice(dayBars, total) * 100);
    int bar_high_price = (int)(bar.close > bar.open ? bar.close * 100 : bar.open * 100);
    int bar_low_price = (int)(bar.open > bar.close ? bar.close * 100 : bar.open * 100);
    
-   // Print("BreakoutTest - high_price: ", high_price, " low_price: ", low_price);
-   // Print("BreakoutTest - bar_high_price: ", bar_high_price, " bar_low_price: ", bar_low_price);
+   Print("BreakoutTest - high_price: ", high_price, " low_price: ", low_price);
+   Print("BreakoutTest - bar_high_price: ", bar_high_price, " bar_low_price: ", bar_low_price);
    double bar_body = MathAbs((bar.close - bar.open) * 100);
    
    if (bar_high_price > high_price)
@@ -1006,13 +1015,14 @@ int BreakoutTest(datetime targetdate, MqlRates &bar)
       double breakout_amount = bar_high_price - high_price;
       int breakout_percent = (int)((breakout_amount / bar_body) * 100);
       // Print("breakout_percent: ", IntegerToString(breakout_percent));
-      // Print("Breakout Amount: ", IntegerToString(breakout_amount), " Body: ", bar_body);
+      Print("Breakout Amount: ", IntegerToString(breakout_amount), " Body: ", bar_body);
       return (int)breakout_percent; // Return bullish breakout percentage
    }
    else if (bar_low_price < low_price)
    {
       double breakout_amount = MathAbs(bar_low_price - low_price);
       int breakout_percent = (int)((breakout_amount / bar_body) * 100);
+      Print("Breakout Amount: ", IntegerToString(breakout_amount), " Body: ", bar_body);
       return (int)breakout_percent; // Return bearish breakout percentage (negative)
    }
    else
