@@ -8,7 +8,15 @@
 #property version "1.00"
 
 //--- Input parameters
+input int PanelWidth = 400;                     // Width of the control panel
+input int PanelHeight = 200;                    // Height of the control panel
 int DaysToShow = 7;                            // Number of days to show lines for
+input int LowPDR = 4000;
+input bool TrackMouse = true;               // Track mouse movements on chart
+
+//--- Input separator
+input string Separator1 = "=================="; // --- Drawing Settings ---
+
 input color LineColor = clrBlue;               // Color of the horizontal lines
 input int LineWidth = 1;                       // Width of the lines
 input ENUM_LINE_STYLE LineStyle = STYLE_SOLID; // Style of the lines
@@ -19,11 +27,7 @@ input int StopLoss = 50;                       // Stop loss in points
 input int TakeProfit = 100;                    // Take profit in points
 input bool ClearAllObjectsOnStart = false;     // Clear all chart objects when EA starts
 
-//--- Input separator
-input string Separator1 = "=================="; // --- Drawing Settings ---
-input int PanelWidth = 400;                     // Width of the control panel
-input int PanelHeight = 200;                    // Height of the control panel
-input int LowPDR = 4000;
+
 
 //--- Global variables
 #include <Trade/Trade.mqh>           // Include trading library
@@ -169,7 +173,21 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
                                        FormatTime(bar.time), BarBodySize(bar));
             }
             MyUI.lblBarInfo.Text(bar_info);
-            ChartRedraw(0);
+            // ChartRedraw(0);
+
+            // Get the High/Low of this bar to position the marker
+            double h = iHigh(_Symbol, _Period, bar_index);
+            double l = iLow(_Symbol, _Period, bar_index);
+            
+            if(TrackMouse)
+            {
+               DrawMouseMarker(bar_start_time, h, l);
+            }
+            else
+            {
+               RemoveMouseMarker();
+               ChartRedraw(0);
+            }
          }
       }
    }
@@ -1027,4 +1045,67 @@ int BreakoutTest(datetime targetdate, MqlRates &bar)
    }
    else
       return 0; // No Breakout
+}
+
+void DrawMouseMarker(datetime time, double high, double low)
+{
+   string line_name = "UI_Mouse_Marker";
+   string text_name = "UI_Mouse_Text";
+   
+   // 1. Calculate offset (5 pips)
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   double offset = 20 * point;
+   if(digits == 5 || digits == 3) offset *= 20;
+
+   double p_top = high + 10;
+   double p_bottom = low - 10;
+
+   // --- DRAW THE LINE (OBJ_TREND) ---
+   if(!ObjectCreate(0, line_name, OBJ_TREND, 0, time, p_top, time, p_bottom))
+   {
+      ObjectMove(0, line_name, 0, time, p_top);
+      ObjectMove(0, line_name, 1, time, p_bottom);
+   }
+   ObjectSetInteger(0, line_name, OBJPROP_RAY_RIGHT, false);
+   ObjectSetInteger(0, line_name, OBJPROP_COLOR, clrRed);
+   ObjectSetInteger(0, line_name, OBJPROP_WIDTH, 3);
+   ObjectSetInteger(0, line_name, OBJPROP_BACK, true);
+
+   // --- DRAW THE TEXT (OBJ_TEXT) ---
+   MqlDateTime dt;
+   TimeToStruct(time, dt);
+   string hourText = StringFormat(" %02d:00", dt.hour);
+
+   if(!ObjectCreate(0, text_name, OBJ_TEXT, 0, time, p_top))
+   {
+      ObjectMove(0, text_name, 0, time, p_top );
+   }
+
+   // Set the text and alignment
+   ObjectSetString(0, text_name, OBJPROP_TEXT, hourText);
+   ObjectSetString(0, text_name, OBJPROP_FONT, "Trebuchet MS");
+   ObjectSetInteger(0, text_name, OBJPROP_FONTSIZE, 8);
+   ObjectSetInteger(0, text_name, OBJPROP_COLOR, clrGreen);
+   
+   // ANCHOR_BOTTOM centers the text horizontally and sits it ON TOP of the price
+   ObjectSetInteger(0, text_name, OBJPROP_ANCHOR, ANCHOR_BOTTOM);
+   
+   ObjectSetInteger(0, text_name, OBJPROP_SELECTABLE, false);
+   
+   ChartRedraw(0);
+}
+
+//+------------------------------------------------------------------+
+//| Remove the vertical marker and its associated hour text          |
+//+------------------------------------------------------------------+
+void RemoveMouseMarker()
+{
+   // 1. Delete both components by their specific names
+   // ObjectDelete returns true if successful, but we don't need to check it here
+   ObjectDelete(0, "UI_Mouse_Marker");
+   ObjectDelete(0, "UI_Mouse_Text");
+
+   // 2. Force a chart refresh to clear the "ghost" images of the deleted objects
+   ChartRedraw(0);
 }
