@@ -8,11 +8,11 @@
 #property version "1.00"
 
 //--- Input parameters
-input int PanelWidth = 400;                     // Width of the control panel
-input int PanelHeight = 200;                    // Height of the control panel
-int DaysToShow = 7;                            // Number of days to show lines for
+input int PanelWidth = 450;  // Width of the control panel
+input int PanelHeight = 200; // Height of the control panel
+int DaysToShow = 7;          // Number of days to show lines for
 input int LowPDR = 4000;
-input bool TrackMouse = true;               // Track mouse movements on chart
+input bool TrackMouse = true; // Track mouse movements on chart
 
 //--- Input separator
 input string Separator1 = "=================="; // --- Drawing Settings ---
@@ -27,8 +27,6 @@ input int StopLoss = 50;                       // Stop loss in points
 input int TakeProfit = 100;                    // Take profit in points
 input bool ClearAllObjectsOnStart = false;     // Clear all chart objects when EA starts
 
-
-
 //--- Global variables
 #include <Trade/Trade.mqh>           // Include trading library
 #include "../../Include/MyPanel.mqh" // Path relative to MQL5\Include
@@ -38,6 +36,10 @@ string line_prefix = "LA_HighLowClose_"; // Prefix for line object names
 CArrayLong notified_deals;               // Array to track notified deals
 CTrade trade;                            // Trade object
 CMyPanel MyUI;
+
+// Global variable to track last position ID (add this at the top of your script if not already there)
+ulong lastPositionID = 0;
+ulong lastOpenPositionID = 0; // Track last opened position to avoid duplicate notifications
 
 //+------------------------------------------------------------------+
 //| Debug print function                                            |
@@ -67,6 +69,9 @@ int OnInit()
    DaysToShow = (int)StringToInteger(MyUI.txtS1Days.Text());
    Draw_S1_Lines(setDate, DaysToShow);
 
+   // Create timer to update every 1 second
+   EventSetTimer(1);
+
    Print("-OnInit()");
    return INIT_SUCCEEDED;
 }
@@ -77,6 +82,8 @@ void OnDeinit(const int reason)
 {
    // Clean up - remove all our lines when EA is removed
    RemoveAllLines();
+   EventKillTimer();
+   ObjectDelete(0, "UI_Countdown_Label");
    Print("Daily High Close Lines EA deinitialized");
    MyUI.Destroy(reason);
 }
@@ -162,7 +169,8 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
             string bar_info = "";
             if (bo_percent > 0)
             {
-               if(bo_percent > 100) bo_percent = 100; // Cap at 100%
+               if (bo_percent > 100)
+                  bo_percent = 100; // Cap at 100%
                bar_info = StringFormat("[%s] Body: %d BO %d%%",
                                        FormatTime(bar.time), BarBodySize(bar),
                                        bo_percent);
@@ -173,13 +181,37 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
                                        FormatTime(bar.time), BarBodySize(bar));
             }
             MyUI.lblBarInfo.Text(bar_info);
+
+            // bar info 2
+            int pips_oc = (int)MathAbs((bar.close - bar.open) / _Point);
+            int pips_oh = (int)(MathAbs((bar.close < bar.open ? bar.open - bar.low : bar.high - bar.open)) / _Point);
+
+            string bar_info2 = "";  
+            if (bar.close > bar.open)
+            {
+               int pips_r = (int)((bar.open - bar.low) / _Point);
+               bar_info2 = StringFormat("↑: %d pips | ↑↑: %d pips | ↓R: %d pips",
+                                        pips_oc, pips_oh, pips_r);
+               // Print(bar.open, " ", bar.close, " ", bar.high, " ", bar.low , " ", (int)((bar.open - bar.low) * 100));
+            }
+            else
+            {
+               int pips_r = (int)((bar.high - bar.open) / _Point);
+               bar_info2 = StringFormat("↓: %d pips | ↓↓: %d pips | ↑R: %d pips",
+                                        pips_oc, pips_oh, pips_r);
+            }
+
+            MyUI.lblBarInfo2.Text(bar_info2);
+
             // ChartRedraw(0);
 
             // Get the High/Low of this bar to position the marker
-            double h = iHigh(_Symbol, _Period, bar_index);
-            double l = iLow(_Symbol, _Period, bar_index);
-            
-            if(TrackMouse)
+            // double h = iHigh(_Symbol, _Period, bar_index);
+            // double l = iLow(_Symbol, _Period, bar_index);
+            double h = bar.high;
+            double l = bar.low;
+
+            if (TrackMouse)
             {
                DrawMouseMarker(bar_start_time, h, l);
             }
@@ -204,6 +236,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
 //+------------------------------------------------------------------+
 void OnTick()
 {
+   UpdateCountdown();
    //---
 }
 //+------------------------------------------------------------------+
@@ -211,9 +244,83 @@ void OnTick()
 //+------------------------------------------------------------------+
 void OnTrade()
 {
-   //---
-}
+   // Select trade history for the current moment
+   HistorySelect(TimeCurrent() - 60, TimeCurrent()); // Last 60 seconds to ensure we get the latest deal
 
+   // Get the total number of deals
+   int total_deals = HistoryDealsTotal();
+   if (total_deals == 0)
+      return; // No deals found
+
+   // Get the most recent deal (last in the list)
+   ulong deal_ticket = HistoryDealGetTicket(total_deals - 1);
+   if (deal_ticket == 0)
+      return; // Invalid deal
+
+   // Get deal properties
+   long deal_entry = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
+   long deal_position_id = HistoryDealGetInteger(deal_ticket, DEAL_POSITION_ID);
+   string symbol = HistoryDealGetString(deal_ticket, DEAL_SYMBOL);
+   long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
+   string deal_type_str = (deal_type == DEAL_TYPE_BUY ? "Buy" : "Sell");
+
+   // Handle position opening (DEAL_ENTRY_IN)
+   if (deal_entry == DEAL_ENTRY_IN)
+   {
+      if (lastOpenPositionID == deal_position_id)
+      {
+         // Skip to avoid duplicate notification for same position opening
+         return;
+      }
+      lastOpenPositionID = deal_position_id;
+
+      double volume = HistoryDealGetDouble(deal_ticket, DEAL_VOLUME);
+      double price = HistoryDealGetDouble(deal_ticket, DEAL_PRICE);
+
+      // Format the notification message for opening
+      string message = StringFormat("Position #%lld opened on %s, Type: %s, Volume: %.2f, Price: %.5f",
+                                    deal_position_id, symbol, deal_type_str, volume, price);
+
+      // Send push notification
+      if (!SendNotification(message))
+      {
+         Print("Failed to send open notification: ", GetLastError());
+      }
+      else
+      {
+         Print("Open notification sent: ", message);
+      }
+   }
+
+   // Handle position closing (DEAL_ENTRY_OUT)
+   else if (deal_entry == DEAL_ENTRY_OUT)
+   {
+      if (lastPositionID == deal_position_id)
+      {
+         // Skip to avoid duplicate notification for same position closure
+         return;
+      }
+      lastPositionID = deal_position_id;
+
+      double profit = HistoryDealGetDouble(deal_ticket, DEAL_PROFIT);
+      double volume = HistoryDealGetDouble(deal_ticket, DEAL_VOLUME);
+      double price = HistoryDealGetDouble(deal_ticket, DEAL_PRICE);
+
+      // Format the notification message for closing
+      string message = StringFormat("Position #%lld closed on %s, Type: %s, Volume: %.2f, Price: %.5f, Profit: %.2f",
+                                    deal_position_id, symbol, deal_type_str, volume, price, profit);
+
+      // Send push notification
+      if (!SendNotification(message))
+      {
+         Print("Failed to send close notification: ", GetLastError());
+      }
+      else
+      {
+         Print("Close notification sent: ", message);
+      }
+   }
+}
 //+------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
@@ -261,7 +368,7 @@ int GetBarsByDate(const string symbol,
                   const datetime date,
                   MqlRates &rates[])
 {
-   Print("+GetBarsByDate(): Date = ", TimeToString(date, TIME_DATE));
+   // Print("+GetBarsByDate(): Date = ", TimeToString(date, TIME_DATE));
 
    // 1. Normalize to 00:00:00 of the given date
    MqlDateTime dt_struct;
@@ -373,7 +480,7 @@ void PrintBars(const MqlRates &rates[])
 //+------------------------------------------------------------------+
 double GetHighestBodyPrice(const MqlRates &rates[], int &out_index)
 {
-   Print("+GetHighestBodyPrice()");
+   // Print("+GetHighestBodyPrice()");
    int size = ArraySize(rates);
    if (size <= 0)
       return 0.0;
@@ -454,7 +561,7 @@ double GetLowestBodyPriceByDate(datetime targetdate)
 double GetHighestBodyPriceByDate(datetime targetdate)
 {
    MqlRates rates[];
-   Print("+GetHighestBodyPrice()");
+   // Print("+GetHighestBodyPrice()");
    int size = GetBarsByDate(_Symbol, PERIOD_H1, targetdate, rates);
    if (size <= 0)
       return 0.0;
@@ -499,7 +606,7 @@ void Draw_S1_Lines(datetime targetDate, int prevDays)
 
    if (total > 0)
    {
-      Print("Found ", total, " bars.");
+      // Print("Found ", total, " bars.");
       // dayBars[0] will be the 23:45 bar (if using ArraySetAsSeries)
       // dayBars[total-1] will be the 00:00 bar
       // PrintBars(dayBars);
@@ -947,10 +1054,10 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 {
    // 1. We look for 'TRADE_TRANSACTION_HISTORY_ADD'
    // This indicates a deal has been moved to history (a fill or a close)
-   if (trans.type == TRADE_TRANSACTION_HISTORY_ADD)
-   {
-      ProcessClosedNotification(trans.deal);
-   }
+   // if (trans.type == TRADE_TRANSACTION_HISTORY_ADD)
+   // {
+   //    ProcessClosedNotification(trans.deal);
+   // }
 }
 
 //+------------------------------------------------------------------+
@@ -999,7 +1106,7 @@ void ProcessClosedNotification(ulong deal_id)
 
 int BreakoutTest(datetime targetdate, MqlRates &bar)
 {
-   Print("+BreakoutTest(): Date = ", TimeToString(targetdate, TIME_DATE));
+   // Print("+BreakoutTest(): Date = ", TimeToString(targetdate, TIME_DATE));
    MqlRates dayBars[];
    MqlDateTime dt;
    TimeToStruct(bar.time, dt);
@@ -1023,24 +1130,24 @@ int BreakoutTest(datetime targetdate, MqlRates &bar)
    int low_price = (int)(GetLowestBodyPrice(dayBars, total) * 100);
    int bar_high_price = (int)(bar.close > bar.open ? bar.close * 100 : bar.open * 100);
    int bar_low_price = (int)(bar.open > bar.close ? bar.close * 100 : bar.open * 100);
-   
-   Print("BreakoutTest - high_price: ", high_price, " low_price: ", low_price);
-   Print("BreakoutTest - bar_high_price: ", bar_high_price, " bar_low_price: ", bar_low_price);
+
+   // Print("BreakoutTest - high_price: ", high_price, " low_price: ", low_price);
+   // Print("BreakoutTest - bar_high_price: ", bar_high_price, " bar_low_price: ", bar_low_price);
    double bar_body = MathAbs((bar.close - bar.open) * 100);
-   
+
    if (bar_high_price > high_price)
    {
       double breakout_amount = bar_high_price - high_price;
       int breakout_percent = (int)((breakout_amount / bar_body) * 100);
       // Print("breakout_percent: ", IntegerToString(breakout_percent));
-      Print("Breakout Amount: ", IntegerToString(breakout_amount), " Body: ", bar_body);
+      // Print("Breakout Amount: ", IntegerToString((int)breakout_amount), " Body: ", bar_body);
       return (int)breakout_percent; // Return bullish breakout percentage
    }
    else if (bar_low_price < low_price)
    {
       double breakout_amount = MathAbs(bar_low_price - low_price);
       int breakout_percent = (int)((breakout_amount / bar_body) * 100);
-      Print("Breakout Amount: ", IntegerToString(breakout_amount), " Body: ", bar_body);
+      // Print("Breakout Amount: ", IntegerToString((int)breakout_amount), " Body: ", bar_body);
       return (int)breakout_percent; // Return bearish breakout percentage (negative)
    }
    else
@@ -1051,48 +1158,69 @@ void DrawMouseMarker(datetime time, double high, double low)
 {
    string line_name = "UI_Mouse_Marker";
    string text_name = "UI_Mouse_Text";
-   
-   // 1. Calculate offset (5 pips)
+   string rect_name = "UI_Mouse_Box"; // Name for the container
+
+   // 1. Calculate Offsets
    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-   double offset = 20 * point;
-   if(digits == 5 || digits == 3) offset *= 20;
 
-   double p_top = high + 10;
-   double p_bottom = low - 10;
+   // Your current logic: 5.0 is a large price jump for FX, but works for Indices/Crypto
+   double p_top = high + 5.0;
+   double p_bottom = low - 5.0;
 
-   // --- DRAW THE LINE (OBJ_TREND) ---
-   if(!ObjectCreate(0, line_name, OBJ_TREND, 0, time, p_top, time, p_bottom))
+   // 2. --- DRAW THE LINE (OBJ_TREND) ---
+   if (!ObjectCreate(0, line_name, OBJ_TREND, 0, time, p_top, time, p_bottom))
    {
       ObjectMove(0, line_name, 0, time, p_top);
       ObjectMove(0, line_name, 1, time, p_bottom);
    }
    ObjectSetInteger(0, line_name, OBJPROP_RAY_RIGHT, false);
    ObjectSetInteger(0, line_name, OBJPROP_COLOR, clrRed);
-   ObjectSetInteger(0, line_name, OBJPROP_WIDTH, 3);
+   ObjectSetInteger(0, line_name, OBJPROP_WIDTH, 1);
    ObjectSetInteger(0, line_name, OBJPROP_BACK, true);
 
-   // --- DRAW THE TEXT (OBJ_TEXT) ---
+   // 3. --- PREPARE DATA ---
    MqlDateTime dt;
    TimeToStruct(time, dt);
-   string hourText = StringFormat(" %02d:00", dt.hour);
+   string hourText = StringFormat("%02d:00", dt.hour);
 
-   if(!ObjectCreate(0, text_name, OBJ_TEXT, 0, time, p_top))
+   // We use the text position as our anchor for the box
+   datetime x_text = time + 3600;
+   double y_text = p_top;
+
+   // 4. --- DRAW THE RECTANGLE (OBJ_RECTANGLE) ---
+   // We define the box boundaries relative to the text position
+   // Adjust these multipliers as you add more text
+   datetime x1 = x_text - 3600;       // Half bar left
+   datetime x2 = x_text + (3600 * 7); // Half bar right
+   double y1 = y_text + 2.0;          // Slightly above text
+   double y2 = y_text - 2.0;          // Slightly below text
+
+   // if(!ObjectCreate(0, rect_name, OBJ_RECTANGLE, 0, x1, y1, x2, y2))
+   // {
+   //    ObjectMove(0, rect_name, 0, x1, y1);
+   //    ObjectMove(0, rect_name, 1, x2, y2);
+   // }
+
+   // ObjectSetInteger(0, rect_name, OBJPROP_COLOR, clrLightBlue);      // Border color
+   // ObjectSetInteger(0, rect_name, OBJPROP_FILL, true);          // Fill the box
+   // ObjectSetInteger(0, rect_name, OBJPROP_BGCOLOR, clrBlack);   // Background color
+   // ObjectSetInteger(0, rect_name, OBJPROP_BACK, true);          // Ensure it's behind text
+   // ObjectSetInteger(0, rect_name, OBJPROP_SELECTABLE, false);
+
+   // 5. --- DRAW THE TEXT (OBJ_TEXT) ---
+   if (!ObjectCreate(0, text_name, OBJ_TEXT, 0, x_text + 3600, y_text))
    {
-      ObjectMove(0, text_name, 0, time, p_top );
+      ObjectMove(0, text_name, 0, x_text, y_text);
    }
 
-   // Set the text and alignment
    ObjectSetString(0, text_name, OBJPROP_TEXT, hourText);
    ObjectSetString(0, text_name, OBJPROP_FONT, "Trebuchet MS");
    ObjectSetInteger(0, text_name, OBJPROP_FONTSIZE, 8);
    ObjectSetInteger(0, text_name, OBJPROP_COLOR, clrGreen);
-   
-   // ANCHOR_BOTTOM centers the text horizontally and sits it ON TOP of the price
-   ObjectSetInteger(0, text_name, OBJPROP_ANCHOR, ANCHOR_BOTTOM);
-   
+   ObjectSetInteger(0, text_name, OBJPROP_ANCHOR, ANCHOR_CENTER); // Changed to center for the box
    ObjectSetInteger(0, text_name, OBJPROP_SELECTABLE, false);
-   
+
    ChartRedraw(0);
 }
 
@@ -1107,5 +1235,67 @@ void RemoveMouseMarker()
    ObjectDelete(0, "UI_Mouse_Text");
 
    // 2. Force a chart refresh to clear the "ghost" images of the deleted objects
+   ChartRedraw(0);
+}
+
+//+------------------------------------------------------------------+
+//| Timer function                                                   |
+//+------------------------------------------------------------------+
+void OnTimer()
+{
+   UpdateCountdown();
+}
+
+//+------------------------------------------------------------------+
+//| Logic to calculate and display time                              |
+//+------------------------------------------------------------------+
+void UpdateCountdown()
+{
+   // 1. Static variable to store the state of the last update
+   static int lastSeconds = -1;
+
+   // 2. Calculate current seconds left
+   // TimeTradeServer() is better for timers as it ticks even without new quotes
+   datetime serverTime = TimeTradeServer();
+   datetime barStart = iTime(_Symbol, _Period, 0);
+   int periodSeconds = PeriodSeconds(_Period);
+   int secondsLeft = (int)((barStart + periodSeconds) - serverTime);
+
+   if (secondsLeft < 0)
+      secondsLeft = 0;
+
+   // 3. EXIT EARLY: If the second hasn't changed, don't waste CPU on UI/Redraw
+   if (secondsLeft == lastSeconds)
+      return;
+
+   // Update the state for the next call
+   lastSeconds = secondsLeft;
+
+   // --- START UI UPDATES (Only runs once per second) ---
+
+   string name = "UI_Countdown_Label";
+   int h = secondsLeft / 3600;
+   int m = (secondsLeft % 3600) / 60;
+   int s = secondsLeft % 60;
+
+   string clockStr = (_Period <= PERIOD_H1)
+                         ? StringFormat("Next Bar in: %02d:%02d", m, s)
+                         : StringFormat("Next Bar in: %02d:%02d:%02d", h, m, s);
+
+   if (ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_TOP);
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 10);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clrBlue);
+      ObjectSetString(0, name, OBJPROP_FONT, "Consolas");
+   }
+   ObjectSetString(0, name, OBJPROP_TEXT, clockStr);
+
+   int chartWidth = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, chartWidth / 2);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, 20);
+
    ChartRedraw(0);
 }
