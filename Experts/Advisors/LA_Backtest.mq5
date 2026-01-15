@@ -186,7 +186,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
             int pips_oc = (int)MathAbs((bar.close - bar.open) / _Point);
             int pips_oh = (int)(MathAbs((bar.close < bar.open ? bar.open - bar.low : bar.high - bar.open)) / _Point);
 
-            string bar_info2 = "";  
+            string bar_info2 = "";
             if (bar.close > bar.open)
             {
                int pips_r = (int)((bar.open - bar.low) / _Point);
@@ -277,8 +277,14 @@ void OnTrade()
       double volume = HistoryDealGetDouble(deal_ticket, DEAL_VOLUME);
       double price = HistoryDealGetDouble(deal_ticket, DEAL_PRICE);
 
+      // Get the position to retrieve TP and SL
+      if (PositionSelectByTicket(deal_position_id))
+      {
+         double tp = PositionGetDouble(POSITION_TP);
+         double sl = PositionGetDouble(POSITION_SL);
+      }
       // Format the notification message for opening
-      string message = StringFormat("Position #%lld opened on %s, Type: %s, Volume: %.2f, Price: %.5f",
+      string message = StringFormat("Position #%lld opened on %s, Type: %s, Volume: %.2f, Price: %.2f",
                                     deal_position_id, symbol, deal_type_str, volume, price);
 
       // Send push notification
@@ -306,9 +312,37 @@ void OnTrade()
       double volume = HistoryDealGetDouble(deal_ticket, DEAL_VOLUME);
       double price = HistoryDealGetDouble(deal_ticket, DEAL_PRICE);
 
+      // 1. Get the Entry Price by selecting the position history
+      double entry_price = 0;
+      if (HistorySelectByPosition(deal_position_id))
+      {
+         int total_deals = HistoryDealsTotal();
+         for (int i = 0; i < total_deals; i++)
+         {
+            ulong t = HistoryDealGetTicket(i);
+            // Look for the "In" deal for this position
+            if (HistoryDealGetInteger(t, DEAL_ENTRY) == DEAL_ENTRY_IN)
+            {
+               entry_price = HistoryDealGetDouble(t, DEAL_PRICE);
+               break;
+            }
+         }
+      }
+      
       // Format the notification message for closing
-      string message = StringFormat("Position #%lld closed on %s, Type: %s, Volume: %.2f, Price: %.5f, Profit: %.2f",
-                                    deal_position_id, symbol, deal_type_str, volume, price, profit);
+      string message = "";
+      if (entry_price != 0)
+      {
+         int profit_pips = (int)(MathAbs(entry_price - price)) * 100;
+
+         message = StringFormat("Position closed\r\nType: %s\r\nVolume: %.2f\r\nPrice: %.2f\r\nProfit: %.2f\r\nProfit Pips: %d",
+                                deal_type_str, volume, price, profit, profit_pips);
+      }
+      else
+      {
+         message = StringFormat("Position closed\r\nType: %s\r\nVolume: %.2f\r\nPrice: %.2f\r\nProfit: %.2f",
+                                deal_type_str, volume, price, profit);
+      }
 
       // Send push notification
       if (!SendNotification(message))
@@ -1176,7 +1210,7 @@ void DrawMouseMarker(datetime time, double high, double low)
    }
    ObjectSetInteger(0, line_name, OBJPROP_RAY_RIGHT, false);
    ObjectSetInteger(0, line_name, OBJPROP_COLOR, clrRed);
-   ObjectSetInteger(0, line_name, OBJPROP_WIDTH, 1);
+   ObjectSetInteger(0, line_name, OBJPROP_WIDTH, 2);
    ObjectSetInteger(0, line_name, OBJPROP_BACK, true);
 
    // 3. --- PREPARE DATA ---
