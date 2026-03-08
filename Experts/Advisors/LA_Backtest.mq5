@@ -7,6 +7,32 @@
 #property link "https://www.mql5.com"
 #property version "1.00"
 
+// Define the struct - must match C# layout exactly
+struct GenericEvent
+{
+   int CommandID;
+   long LongValue;
+   double DoubleValue;
+   uchar StringValue[128];  // 64 U nicode chars = 128 bytes
+};
+
+#import "MQLBridge.dll"
+#import
+
+#import "user32.dll"
+   long WindowFromPoint(int x, int y);
+   long GetForegroundWindow();
+#import
+
+enum UIMessageIDs
+{
+   BarData = 1,
+   BarData2 = 2,
+   SetDate = 3,
+   SetS1Days = 4,
+   FormClosed = 9999
+};
+
 //--- Input parameters
 input int PanelWidth = 450;  // Width of the control panel
 input int PanelHeight = 200; // Height of the control panel
@@ -26,6 +52,9 @@ input double LotSize = 0.1;                    // Trade lot size
 input int StopLoss = 50;                       // Stop loss in points
 input int TakeProfit = 100;                    // Take profit in points
 input bool ClearAllObjectsOnStart = false;     // Clear all chart objects when EA starts
+
+// Add this global variable at the top with your other globals
+bool shouldRemoveEA = false;
 
 //--- Global variables
 #include <Trade/Trade.mqh>           // Include trading library
@@ -55,22 +84,31 @@ void DebugPrint(string message)
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   if (!MyUI.Create(0, "LA Backtest", 0, 350, 20, PanelWidth, PanelHeight))
-      return INIT_FAILED;
+   // if (!MyUI.Create(0, "LA Backtest", 0, 350, 20, PanelWidth, PanelHeight))
+   //    return INIT_FAILED;
 
-   MyUI.txtS1Days.Text(IntegerToString(DaysToShow));
+   // MyUI.txtS1Days.Text(IntegerToString(DaysToShow));
 
-   MyUI.Run();
+   // MyUI.Run();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
 
    // Draw_S1_Lines(D'2025.12.29', 10); // Example date and previous days
-   datetime setDate = StringToTime(MyUI.txtDate.Text());
-   RemoveAllLines();
-   DaysToShow = (int)StringToInteger(MyUI.txtS1Days.Text());
-   Draw_S1_Lines(setDate, DaysToShow);
+   // datetime setDate = StringToTime(MyUI.txtDate.Text());
+   // RemoveAllLines();
+   // DaysToShow = (int)StringToInteger(MyUI.txtS1Days.Text());
+   // Draw_S1_Lines(setDate, DaysToShow);
 
    // Create timer to update every 1 second
-   EventSetTimer(1);
+   EventSetMillisecondTimer(100);
+
+   // Get the chart window handle
+   long chartHandle = ChartGetInteger(0, CHART_WINDOW_HANDLE);
+   Print("Chart Window Handle: ", chartHandle);
+   MQLBridge::MQLBridge::StartUI(chartHandle);
+
+   // MQLBridge::MQLBridge::GetLastMessage(1); // Dummy call to ensure DLL is loaded
+   // string msg = FetchStringFromDLL();
+   // Print("DLL Message: ", msg);
 
    Print("-OnInit()");
    return INIT_SUCCEEDED;
@@ -85,7 +123,9 @@ void OnDeinit(const int reason)
    EventKillTimer();
    ObjectDelete(0, "UI_Countdown_Label");
    Print("Daily High Close Lines EA deinitialized");
-   MyUI.Destroy(reason);
+   // MyUI.Destroy(reason);
+   // ExpertRemove(); // Ensure the EA is removed from the chart
+   Print("-OnDeinit() with reason: ", reason);
 }
 
 void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
@@ -152,7 +192,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          // If we are still over the same bar, exit immediately
          if (bar_start_time == last_processed_bar_time)
          {
-            MyUI.ChartEvent(id, lparam, dparam, sparam);
+            // MyUI.ChartEvent(id, lparam, dparam, sparam);
             return;
          }
 
@@ -165,7 +205,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          if (GetBarUnderMouse(x, y, bar))
          {
             int bo_percent = BreakoutTest(bar_start_time, bar);
-            Print("bo_percent: ", bo_percent);
+            // Print("bo_percent: ", bo_percent);
             string bar_info = "";
             if (bo_percent > 0)
             {
@@ -180,7 +220,8 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
                bar_info = StringFormat("[%s] Body: %d",
                                        FormatTime(bar.time), BarBodySize(bar));
             }
-            MyUI.lblBarInfo.Text(bar_info);
+            // MyUI.lblBarInfo.Text(bar_info);
+            SendStringToDLL(bar_info, (int)BarData);
 
             // bar info 2
             int pips_oc = (int)MathAbs((bar.close - bar.open) / _Point);
@@ -201,15 +242,25 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
                                         pips_oc, pips_oh, pips_r);
             }
 
-            MyUI.lblBarInfo2.Text(bar_info2);
+            // MyUI.lblBarInfo2.Text(bar_info2);
+            SendStringToDLL(bar_info2, (int)BarData2);
+
+            // Get bar details
+            // double o = iOpen(_Symbol, _Period, bar_index);
+            // double c = iClose(_Symbol, _Period, bar_index);
+            double h = bar.high;
+            double l = bar.low;
+            // datetime t = iTime(_Symbol, _Period, bar_index);
+            // MQLBridge::MQLBridge::UpdateBarDetails(bar_index,o,c,h,l,(long)t);
 
             // ChartRedraw(0);
 
             // Get the High/Low of this bar to position the marker
             // double h = iHigh(_Symbol, _Period, bar_index);
             // double l = iLow(_Symbol, _Period, bar_index);
-            double h = bar.high;
-            double l = bar.low;
+
+
+            // UpdateHoverDetails(bar_index,o,c,h,l,(long)t);
 
             if (TrackMouse)
             {
@@ -228,7 +279,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       // Print("Chart event: ID=",id, " lparam=", lparam, ", dparam=",dparam, ", sparam=",sparam);
    }
 
-   MyUI.ChartEvent(id, lparam, dparam, sparam);
+   // MyUI.ChartEvent(id, lparam, dparam, sparam);
 }
 
 //+------------------------------------------------------------------+
@@ -236,6 +287,14 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
 //+------------------------------------------------------------------+
 void OnTick()
 {
+   // Check if we should remove the EA
+   if(shouldRemoveEA)
+   {
+      Print("Removing EA on next tick...");
+      ExpertRemove();
+      return;
+   }
+
    UpdateCountdown();
    //---
 }
@@ -284,7 +343,7 @@ void OnTrade()
          double sl = PositionGetDouble(POSITION_SL);
       }
       // Format the notification message for opening
-      string message = StringFormat("Position #%lld opened on %s, Type: %s, Volume: %.2f, Price: %.2f",
+      string message = StringFormat("Position #%lld opened on %s,\r\nType: %s,\r\nVolume: %.2f,\r\nPrice: %.2f",
                                     deal_position_id, symbol, deal_type_str, volume, price);
 
       // Send push notification
@@ -449,12 +508,12 @@ int GetBarsByDate(const string symbol,
 
       while (tries < 5 && next_copied == 0)
       {
-         Print("Checking for next day bar on date: ", TimeToString(next_day, TIME_DATE));
+         // Print("Checking for next day bar on date: ", TimeToString(next_day, TIME_DATE));
          next_copied = CopyRates(symbol, timeframe, next_day, next_day + 3601, next_day_bar);
 
          if (next_copied > 0)
          {
-            Print("Found next day bar for date: ", TimeToString(next_day, TIME_DATE));
+            // Print("Found next day bar for date: ", TimeToString(next_day, TIME_DATE));
 
             // Append next day bar to rates array
             int original_size = ArraySize(rates);
@@ -470,7 +529,7 @@ int GetBarsByDate(const string symbol,
    }
    else
    {
-      Print("Target date is today. Skipping next-day bar check.");
+      // Print("Target date is today. Skipping next-day bar check.");
    }
    // --- MODIFICATION END ---
 
@@ -1216,7 +1275,7 @@ void DrawMouseMarker(datetime time, double high, double low)
    // 3. --- PREPARE DATA ---
    MqlDateTime dt;
    TimeToStruct(time, dt);
-   string hourText = StringFormat("%02d:00", dt.hour);
+   string hourText = StringFormat("%02d:%02d", dt.hour, dt.min);
 
    // We use the text position as our anchor for the box
    datetime x_text = time + 3600;
@@ -1277,7 +1336,114 @@ void RemoveMouseMarker()
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   UpdateCountdown();
+   // If flagged for removal, don't process anything
+   if(shouldRemoveEA)
+      return;
+
+   CheckUIEvents();
+
+   // Then do other timer tasks
+   if(!shouldRemoveEA)  // Check again in case event set the flag
+      UpdateCountdown();
+}
+
+void CheckUIEvents()
+{
+   // Use a loop to process ALL pending events in the queue
+   int maxEvents = 10; // Safety limit to prevent infinite loops
+   int processedCount = 0;
+   
+   while(processedCount < maxEvents)
+   {
+      int eventID = MQLBridge::MQLBridge::PeekNextEvent();
+      
+      if(eventID == 0)
+         break; // No more events in queue
+      
+      // Get the actual event data
+      ushort buffer[256];
+      ArrayInitialize(buffer, 0);
+      MQLBridge::MQLBridge::GetNextEvent(buffer, 256);
+      
+      string eventMessage = ShortArrayToString(buffer);
+      Print("Processing event: ", eventMessage);
+      
+      // Process the event
+      if(!ProcessUIEvent(eventMessage))
+      {
+         // If ProcessUIEvent returns false, it means we should stop (form closed)
+         break;
+      }
+      
+      processedCount++;
+   }
+}
+
+bool ProcessUIEvent(string eventMessage)
+{
+   // Parse the comma-separated message
+   int commaPos = StringFind(eventMessage, ",");
+   if (commaPos == -1)
+      return true; // Invalid format, continue processing other events
+   
+   string eventIDStr = StringSubstr(eventMessage, 0, commaPos);
+   string eventData = StringSubstr(eventMessage, commaPos + 1);
+   
+   int eventID = (int)StringToInteger(eventIDStr);
+   
+   Print("Event ID: ", eventID, " | Data: ", eventData);
+   
+   // Process based on event ID
+   switch(eventID)
+   {
+      case BarData:
+         Print("Bar Data Event: ", eventData);
+         break;
+         
+      case SetDate:
+      {
+         datetime currentDate = StringToTime(eventData);
+         datetime nextDate = GetNextTradingDay(currentDate);
+         RemoveAllLines();
+         Draw_S1_Lines(nextDate, DaysToShow);
+         break;
+      }
+      
+      case FormClosed:
+      {
+         Print("===== FORM CLOSED EVENT RECEIVED =====");
+         Print("Starting cleanup sequence...");
+         
+         // 1. Kill the timer first to stop new events
+         EventKillTimer();
+         Print("Timer killed");
+         
+         // 2. Clean up all objects
+         RemoveAllLines();
+         Print("Lines removed");
+         
+         ObjectDelete(0, "UI_Countdown_Label");
+         Print("Countdown label deleted");
+         
+         // 3. Force chart redraw
+         ChartRedraw(0);
+         Print("Chart redrawn");
+         
+         // 4. Remove the EA
+         // 4. Set flag to remove EA on next tick (NOT here)
+         shouldRemoveEA = true;
+         Print("EA removal flag set - will remove on next tick");
+         
+         // Return false to stop processing more events
+         return false;
+      }
+      
+      default:
+         Print("Unknown Event ID: ", eventID);
+         break;
+   }
+   
+   return true; // Continue processing events
 }
 
 //+------------------------------------------------------------------+
@@ -1332,4 +1498,52 @@ void UpdateCountdown()
    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, 20);
 
    ChartRedraw(0);
+}
+
+string FetchStringFromDLL()
+{
+   ushort buffer[256];
+   ArrayInitialize(buffer, 0);
+
+   // This should no longer throw "undeclared identifier"
+   MQLBridge::MQLBridge::GetLastMessage(buffer, 256);
+
+   // Convert ushort array back to string
+    string result = "";
+    for(int i = 0; i < ArraySize(buffer); i++)
+    {
+        if(buffer[i] == 0) break; // Stop at null terminator
+        result += CharToString(buffer[i]);
+    }
+
+   datetime t = iTime(_Symbol, _Period, 0);
+   // MQLBridge::MQLBridge::UpdateHoverDetails(bar_index,o,c,h,l,(long)t);
+
+   return result;
+}
+
+void SendStringToDLL(string msg, int id = 0)
+{
+   Print("Sending message to DLL: ", msg);
+   int len = StringLen(msg) + 1; // +1 for null terminator
+   // Convert string to ushort array
+   ushort buffer[];
+   ArrayResize(buffer, len);
+
+   StringToShortArray(msg, buffer);
+   buffer[len - 1] = 0; // null terminator
+
+   // Direct call - MQL5 handles the pointer conversion for you
+   MQLBridge::MQLBridge::SendMessage(buffer, len, id);
+}
+
+//+------------------------------------------------------------------+
+//| Check if we have reached the beginning of available history      |
+//+------------------------------------------------------------------+
+bool IsAtEndOfHistory(const string symbol, const ENUM_TIMEFRAMES timeframe, datetime target_date)
+{
+   datetime first_date = (datetime)SeriesInfoInteger(symbol, timeframe, SERIES_FIRSTDATE);
+   
+   // If the target we want to jump to is earlier than the first available date
+   return (target_date <= first_date);
 }
