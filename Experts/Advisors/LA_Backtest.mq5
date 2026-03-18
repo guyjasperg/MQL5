@@ -13,23 +13,29 @@ struct GenericEvent
    int CommandID;
    long LongValue;
    double DoubleValue;
-   uchar StringValue[128];  // 64 U nicode chars = 128 bytes
+   uchar StringValue[128]; // 64 U nicode chars = 128 bytes
 };
 
-#import "MQLBridge.dll"
-#import
+// #import "MQLBridge.dll"
+// #import
 
-#import "user32.dll"
-   long WindowFromPoint(int x, int y);
-   long GetForegroundWindow();
-#import
+// #import "user32.dll"
+//    long WindowFromPoint(int x, int y);
+//    long GetForegroundWindow();
+// #import
 
+//Make sure this is in sync with the C# enum UIMessageIDs
 enum UIMessageIDs
 {
    BarData = 1,
    BarData2 = 2,
-   SetDate = 3,
-   SetS1Days = 4,
+   SetS1Days = 3,
+   Config = 4,
+   ChartNavigation = 5,
+   CountdownUpdate = 6,
+   BuySell = 7,
+   TradeExecuted = 8,
+   AccountBalance = 9,
    FormClosed = 9999
 };
 
@@ -52,6 +58,9 @@ input double LotSize = 0.1;                    // Trade lot size
 input int StopLoss = 50;                       // Stop loss in points
 input int TakeProfit = 100;                    // Take profit in points
 input bool ClearAllObjectsOnStart = false;     // Clear all chart objects when EA starts
+int DailyStartHour = -1;                       // -1 means not yet detected
+bool bSendNotifications = true;                // Enable push notifications for trades
+datetime _currentDate;
 
 // Add this global variable at the top with your other globals
 bool shouldRemoveEA = false;
@@ -109,6 +118,7 @@ int OnInit()
    // MQLBridge::MQLBridge::GetLastMessage(1); // Dummy call to ensure DLL is loaded
    // string msg = FetchStringFromDLL();
    // Print("DLL Message: ", msg);
+   SetChartShift(20);
 
    Print("-OnInit()");
    return INIT_SUCCEEDED;
@@ -259,7 +269,6 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
             // double h = iHigh(_Symbol, _Period, bar_index);
             // double l = iLow(_Symbol, _Period, bar_index);
 
-
             // UpdateHoverDetails(bar_index,o,c,h,l,(long)t);
 
             if (TrackMouse)
@@ -288,7 +297,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
 void OnTick()
 {
    // Check if we should remove the EA
-   if(shouldRemoveEA)
+   if (shouldRemoveEA)
    {
       Print("Removing EA on next tick...");
       ExpertRemove();
@@ -347,13 +356,16 @@ void OnTrade()
                                     deal_position_id, symbol, deal_type_str, volume, price);
 
       // Send push notification
-      if (!SendNotification(message))
+      if (bSendNotifications)
       {
-         Print("Failed to send open notification: ", GetLastError());
-      }
-      else
-      {
-         Print("Open notification sent: ", message);
+         if (!SendNotification(message))
+         {
+            Print("Failed to send open notification: ", GetLastError());
+         }
+         else
+         {
+            Print("Open notification sent: ", message);
+         }
       }
    }
 
@@ -387,7 +399,7 @@ void OnTrade()
             }
          }
       }
-      
+
       // Format the notification message for closing
       string message = "";
       if (entry_price != 0)
@@ -404,13 +416,16 @@ void OnTrade()
       }
 
       // Send push notification
-      if (!SendNotification(message))
+      if (bSendNotifications)
       {
-         Print("Failed to send close notification: ", GetLastError());
-      }
-      else
-      {
-         Print("Close notification sent: ", message);
+         if (!SendNotification(message))
+         {
+            Print("Failed to send close notification: ", GetLastError());
+         }
+         else
+         {
+            Print("Close notification sent: ", message);
+         }
       }
    }
 }
@@ -793,11 +808,19 @@ void Draw_Line(double price, string desc, int style)
 //+------------------------------------------------------------------+
 void DrawVerticalLine(const datetime time)
 {
+   // Get the start hour for this specific date
+   int startHour = GetCachedDayStartHour(time);
+
+   if (startHour == -1)
+   {
+      Print("Cannot draw vertical line - no trading session found for ", TimeToString(time, TIME_DATE));
+      return;
+   }
 
    // Normalize to start of day (00:00)
    MqlDateTime dt;
    TimeToStruct(time, dt);
-   dt.hour = 1;
+   dt.hour = startHour;
    dt.min = 0;
    dt.sec = 0;
    datetime startOfDay = StructToTime(dt);
@@ -1076,10 +1099,19 @@ int BarBodySize(const MqlRates &bar)
 //+------------------------------------------------------------------+
 void DrawBoxDaily(datetime date, double y_high, double y_low)
 {
+   // Get the start hour for this specific date
+   int startHour = GetCachedDayStartHour(date);
+
+   if (startHour == -1)
+   {
+      Print("Cannot draw vertical line - no trading session found for ", TimeToString(date, TIME_DATE));
+      return;
+   }
+
    // 1. Normalize to get the X-axis boundaries (Start and End of day)
    MqlDateTime dt_struct;
    TimeToStruct(date, dt_struct);
-   dt_struct.hour = 1;
+   dt_struct.hour = startHour;
    dt_struct.min = 0;
    dt_struct.sec = 0;
 
@@ -1302,7 +1334,31 @@ void DrawMouseMarker(datetime time, double high, double low)
    // ObjectSetInteger(0, rect_name, OBJPROP_SELECTABLE, false);
 
    // 5. --- DRAW THE TEXT (OBJ_TEXT) ---
-   if (!ObjectCreate(0, text_name, OBJ_TEXT, 0, x_text + 3600, y_text))
+   int barOffsetSeconds = PeriodSeconds(_Period) / 2; // Default to half a bar offset
+   switch (_Period)
+   {
+   case PERIOD_M5:
+      barOffsetSeconds = 300 / 4; // 5 minutes
+      break;
+   case PERIOD_M15:
+      barOffsetSeconds = 900 / 3; // 15 minutes
+      break;
+   case PERIOD_M30:
+      barOffsetSeconds = 1800 / 2; // 30 minutes
+      break;
+   case PERIOD_H1:
+      barOffsetSeconds = 3600; // 1 hour
+      break;
+   case PERIOD_H4:
+      barOffsetSeconds = 14400; // 4 hours
+      break;
+   case PERIOD_D1:
+      barOffsetSeconds = 86400; // 1 day
+      break;
+   default:
+      break;
+   }
+   if (!ObjectCreate(0, text_name, OBJ_TEXT, 0, x_text + barOffsetSeconds, y_text))
    {
       ObjectMove(0, text_name, 0, x_text, y_text);
    }
@@ -1337,13 +1393,13 @@ void RemoveMouseMarker()
 void OnTimer()
 {
    // If flagged for removal, don't process anything
-   if(shouldRemoveEA)
+   if (shouldRemoveEA)
       return;
 
    CheckUIEvents();
 
    // Then do other timer tasks
-   if(!shouldRemoveEA)  // Check again in case event set the flag
+   if (!shouldRemoveEA) // Check again in case event set the flag
       UpdateCountdown();
 }
 
@@ -1352,29 +1408,29 @@ void CheckUIEvents()
    // Use a loop to process ALL pending events in the queue
    int maxEvents = 10; // Safety limit to prevent infinite loops
    int processedCount = 0;
-   
-   while(processedCount < maxEvents)
+
+   while (processedCount < maxEvents)
    {
       int eventID = MQLBridge::MQLBridge::PeekNextEvent();
-      
-      if(eventID == 0)
+
+      if (eventID == 0)
          break; // No more events in queue
-      
+
       // Get the actual event data
       ushort buffer[256];
       ArrayInitialize(buffer, 0);
       MQLBridge::MQLBridge::GetNextEvent(buffer, 256);
-      
+
       string eventMessage = ShortArrayToString(buffer);
       Print("Processing event: ", eventMessage);
-      
+
       // Process the event
-      if(!ProcessUIEvent(eventMessage))
+      if (!ProcessUIEvent(eventMessage))
       {
          // If ProcessUIEvent returns false, it means we should stop (form closed)
          break;
       }
-      
+
       processedCount++;
    }
 }
@@ -1385,65 +1441,127 @@ bool ProcessUIEvent(string eventMessage)
    int commaPos = StringFind(eventMessage, ",");
    if (commaPos == -1)
       return true; // Invalid format, continue processing other events
-   
+
    string eventIDStr = StringSubstr(eventMessage, 0, commaPos);
    string eventData = StringSubstr(eventMessage, commaPos + 1);
-   
+
    int eventID = (int)StringToInteger(eventIDStr);
-   
+
    Print("Event ID: ", eventID, " | Data: ", eventData);
-   
+
    // Process based on event ID
-   switch(eventID)
+   switch (eventID)
    {
-      case BarData:
-         Print("Bar Data Event: ", eventData);
-         break;
-         
-      case SetDate:
-      {
-         datetime currentDate = StringToTime(eventData);
-         datetime nextDate = GetNextTradingDay(currentDate);
-         RemoveAllLines();
-         Draw_S1_Lines(nextDate, DaysToShow);
-         break;
-      }
-      
-      case FormClosed:
-      {
-         Print("===== FORM CLOSED EVENT RECEIVED =====");
-         Print("Starting cleanup sequence...");
-         
-         // 1. Kill the timer first to stop new events
-         EventKillTimer();
-         Print("Timer killed");
-         
-         // 2. Clean up all objects
-         RemoveAllLines();
-         Print("Lines removed");
-         
-         ObjectDelete(0, "UI_Countdown_Label");
-         Print("Countdown label deleted");
-         
-         // 3. Force chart redraw
-         ChartRedraw(0);
-         Print("Chart redrawn");
-         
-         // 4. Remove the EA
-         // 4. Set flag to remove EA on next tick (NOT here)
-         shouldRemoveEA = true;
-         Print("EA removal flag set - will remove on next tick");
-         
-         // Return false to stop processing more events
-         return false;
-      }
-      
-      default:
-         Print("Unknown Event ID: ", eventID);
-         break;
+   case BarData:
+      Print("Bar Data Event: ", eventData);
+      break;
+
+   case SetS1Days:
+   {
+      datetime _currentDate = StringToTime(eventData);
+      datetime nextDate = GetNextTradingDay(_currentDate);
+      RemoveAllLines();
+      DailyStartHour = -1; // Reset to force re-detection
+      Draw_S1_Lines(nextDate, DaysToShow);
+      break;
    }
-   
+   case Config:
+   {
+      string parts[];
+      StringSplit(eventData, ',', parts);
+      // Now 'parts' contains each value as a separate string
+      //[S1Days, SendNotification]
+      if (parts[0] != "")
+      {
+         DaysToShow = (int)StringToInteger(parts[0]);
+         // Print("Updated DaysToShow: ", DaysToShow);
+      }
+
+      if (parts[1] != "")
+      {
+         bSendNotifications = (bool)StringToInteger(parts[1]);
+         // Print("Updated bSendNotifications: ", bSendNotifications);
+      }
+      // RefreshChart();
+
+      break;
+   }
+   case ChartNavigation:
+   {
+      string direction = eventData; // "Left" or "Right"
+      StringToLower(direction);
+      MoveChartBars(direction, 1);
+      break;
+   }
+   case BuySell:
+   {
+      // Parse: "BUY|0.1|100|50"
+      string parts[];
+      StringSplit(eventData, '|', parts);
+      
+      if (ArraySize(parts) == 4)
+      {
+         string direction = parts[0];
+         double lots = StringToDouble(parts[1]);
+         int tp = (int)StringToInteger(parts[2]);
+         int sl = (int)StringToInteger(parts[3]);
+         
+         if (direction == "BUY")
+         {
+            AutoTrade(TRADE_BUY, lots, tp, sl, "UI Trade");
+         }
+         else if (direction == "SELL")
+         {
+            AutoTrade(TRADE_SELL, lots, tp, sl, "UI Trade");
+         }
+
+         SendStringToDLL("TradeExecuted", (int)TradeExecuted);
+      }
+      break;
+   }
+   case FormClosed:
+   {
+      Print("===== FORM CLOSED EVENT RECEIVED =====");
+      Print("Starting cleanup sequence...");
+
+      // 1. Kill the timer first to stop new events
+      EventKillTimer();
+      Print("Timer killed");
+
+      // 2. Clean up all objects
+      RemoveAllLines();
+      Print("Lines removed");
+
+      ObjectDelete(0, "UI_Countdown_Label");
+      Print("Countdown label deleted");
+
+      // 3. Force chart redraw
+      ChartRedraw(0);
+      Print("Chart redrawn");
+
+      // 4. Remove the EA
+      // 4. Set flag to remove EA on next tick (NOT here)
+      shouldRemoveEA = true;
+      Print("EA removal flag set - will remove on next tick");
+
+      // Return false to stop processing more events
+      return false;
+   }
+
+   default:
+      Print("Unknown Event ID: ", eventID);
+      break;
+   }
+
    return true; // Continue processing events
+}
+
+void RefreshChart()
+{
+   datetime nextDate = GetNextTradingDay(_currentDate);
+   RemoveAllLines();
+   DailyStartHour = -1; // Reset to force re-detection
+   Draw_S1_Lines(nextDate, DaysToShow);
 }
 
 //+------------------------------------------------------------------+
@@ -1497,6 +1615,17 @@ void UpdateCountdown()
    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, chartWidth / 2);
    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, 20);
 
+   //send to DLL
+   clockStr = (_Period <= PERIOD_H1)
+                  ? StringFormat("%02d:%02d", m, s)
+                  : StringFormat("%02d:%02d:%02d", h, m, s);
+   SendStringToDLL(clockStr, (int)CountdownUpdate);
+
+   //also update account balance
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   string balanceStr = StringFormat("Bal: $%.2f", balance);
+   SendStringToDLL(balanceStr, (int)AccountBalance);
+   
    ChartRedraw(0);
 }
 
@@ -1509,12 +1638,13 @@ string FetchStringFromDLL()
    MQLBridge::MQLBridge::GetLastMessage(buffer, 256);
 
    // Convert ushort array back to string
-    string result = "";
-    for(int i = 0; i < ArraySize(buffer); i++)
-    {
-        if(buffer[i] == 0) break; // Stop at null terminator
-        result += CharToString(buffer[i]);
-    }
+   string result = "";
+   for (int i = 0; i < ArraySize(buffer); i++)
+   {
+      if (buffer[i] == 0)
+         break; // Stop at null terminator
+      result += CharToString(buffer[i]);
+   }
 
    datetime t = iTime(_Symbol, _Period, 0);
    // MQLBridge::MQLBridge::UpdateHoverDetails(bar_index,o,c,h,l,(long)t);
@@ -1524,7 +1654,7 @@ string FetchStringFromDLL()
 
 void SendStringToDLL(string msg, int id = 0)
 {
-   Print("Sending message to DLL: ", msg);
+   // Print("Sending message to DLL: ", msg);
    int len = StringLen(msg) + 1; // +1 for null terminator
    // Convert string to ushort array
    ushort buffer[];
@@ -1543,7 +1673,719 @@ void SendStringToDLL(string msg, int id = 0)
 bool IsAtEndOfHistory(const string symbol, const ENUM_TIMEFRAMES timeframe, datetime target_date)
 {
    datetime first_date = (datetime)SeriesInfoInteger(symbol, timeframe, SERIES_FIRSTDATE);
-   
+
    // If the target we want to jump to is earlier than the first available date
    return (target_date <= first_date);
 }
+
+//+------------------------------------------------------------------+
+//| Most Reliable: Get first bar of a specific date                  |
+//+------------------------------------------------------------------+
+datetime GetFirstBarTimeOfDay(datetime target_date)
+{
+   MqlDateTime dt;
+   TimeToStruct(target_date, dt);
+   dt.hour = 0;
+   dt.min = 0;
+   dt.sec = 0;
+
+   datetime day_start = StructToTime(dt);
+   datetime day_end = day_start + 86399; // 23:59:59
+
+   // Get all bars for this day
+   MqlRates rates[];
+   ArraySetAsSeries(rates, false);
+
+   int copied = CopyRates(_Symbol, PERIOD_H1, day_start, day_end, rates);
+
+   if (copied > 0)
+   {
+      // Return the first bar's time
+      return rates[0].time;
+   }
+
+   // No bars found - might be weekend or holiday
+   return 0;
+}
+
+//+------------------------------------------------------------------+
+//| Extract hour from datetime                                       |
+//+------------------------------------------------------------------+
+int GetHourFromDateTime(datetime dt)
+{
+   MqlDateTime mdt;
+   TimeToStruct(dt, mdt);
+   return mdt.hour;
+}
+
+//+------------------------------------------------------------------+
+//| Complete solution: Get start hour with caching                   |
+//+------------------------------------------------------------------+
+// Global cache for start hours by date
+struct DayStartCache
+{
+   datetime date;
+   int start_hour;
+};
+
+DayStartCache _startHourCache[];
+
+int GetCachedDayStartHour(datetime target_date)
+{
+   // Normalize to just the date (remove time)
+   MqlDateTime dt;
+   TimeToStruct(target_date, dt);
+   dt.hour = 0;
+   dt.min = 0;
+   dt.sec = 0;
+   datetime normalized_date = StructToTime(dt);
+
+   // Check cache first
+   for (int i = 0; i < ArraySize(_startHourCache); i++)
+   {
+      if (_startHourCache[i].date == normalized_date)
+      {
+         return _startHourCache[i].start_hour;
+      }
+   }
+
+   // Not in cache, detect it
+   datetime first_bar = GetFirstBarTimeOfDay(target_date);
+
+   if (first_bar > 0)
+   {
+      int start_hour = GetHourFromDateTime(first_bar);
+
+      // Add to cache
+      int cache_size = ArraySize(_startHourCache);
+      ArrayResize(_startHourCache, cache_size + 1);
+      _startHourCache[cache_size].date = normalized_date;
+      _startHourCache[cache_size].start_hour = start_hour;
+
+      Print("Cached start hour for ", TimeToString(normalized_date, TIME_DATE), ": ", start_hour, ":00");
+      return start_hour;
+   }
+
+   return -1; // Unable to determine
+}
+
+//+------------------------------------------------------------------+
+//| Set the chart shift (space from right border)                    |
+//+------------------------------------------------------------------+
+void SetChartShift(int shift_percent)
+{
+   // shift_percent: 0-50 (percentage of chart width)
+   // 0 = no shift, 50 = maximum shift (half the chart)
+   Print("SetChartShift: ", shift_percent);
+   ChartSetInteger(0, CHART_SHIFT, true);              // Enable shift
+   ChartSetDouble(0, CHART_SHIFT_SIZE, shift_percent); // Set shift percentage
+
+   ChartRedraw(0);
+}
+
+//+------------------------------------------------------------------+
+//| Move the chart by specified number of bars                       |
+//+------------------------------------------------------------------+
+void MoveChartBars(string direction, int bars = 1)
+{
+   // Disable autoscroll to prevent chart from snapping back
+   ChartSetInteger(0, CHART_AUTOSCROLL, false);
+
+   int shift = 0;
+
+   if (direction == "left")
+   {
+      shift = bars; // Positive = move left (into history)
+   }
+   else if (direction == "right")
+   {
+      shift = -bars; // Negative = move right (toward present)
+   }
+   else
+   {
+      Print("Invalid direction. Use 'left' or 'right'.");
+      return;
+   }
+
+   if (!ChartNavigate(0, CHART_CURRENT_POS, shift))
+   {
+      Print("Failed to navigate chart. Error: ", GetLastError());
+   }
+
+   ChartRedraw(0);
+}
+
+//+------------------------------------------------------------------+
+//| Get all deals in history for a time period                       |
+//+------------------------------------------------------------------+
+void GetTradeHistory(datetime from_date, datetime to_date)
+{
+   // Select history for the period
+   if (!HistorySelect(from_date, to_date))
+   {
+      Print("Failed to select history");
+      return;
+   }
+
+   int total_deals = HistoryDealsTotal();
+   Print("Total deals in period: ", total_deals);
+
+   string sTradeHistory = "";
+   for (int i = 0; i < total_deals; i++)
+   {
+      ulong deal_ticket = HistoryDealGetTicket(i);
+
+      if (deal_ticket > 0 && IsActualTrade(deal_ticket))
+      {
+         // Get deal properties
+         long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
+         long deal_entry = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
+         double deal_profit = HistoryDealGetDouble(deal_ticket, DEAL_PROFIT);
+         double deal_volume = HistoryDealGetDouble(deal_ticket, DEAL_VOLUME);
+         double deal_price = HistoryDealGetDouble(deal_ticket, DEAL_PRICE);
+         datetime deal_time = (datetime)HistoryDealGetInteger(deal_ticket, DEAL_TIME);
+         string deal_symbol = HistoryDealGetString(deal_ticket, DEAL_SYMBOL);
+         string deal_comment = HistoryDealGetString(deal_ticket, DEAL_COMMENT);
+
+         sTradeHistory += StringFormat("%lld,%s,%s,%.2f,%.5f,%.2f,%s,%s\n",
+                                       deal_ticket,
+                                       deal_symbol,
+                                       GetDealTypeString(deal_type),
+                                       deal_volume,
+                                       deal_price,
+                                       deal_profit,
+                                       TimeToString(deal_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS),
+                                       deal_comment);
+
+         PrintFormat("Deal #%lld: %s %s %.2f lots at %.5f, Profit: %.2f, Time: %s",
+                     deal_ticket,
+                     deal_symbol,
+                     GetDealTypeString(deal_type),
+                     deal_volume,
+                     deal_price,
+                     deal_profit,
+                     TimeToString(deal_time));
+      }
+   }
+
+   SendStringToDLL(sTradeHistory, 0);
+}
+
+string GetDealTypeString(long deal_type)
+{
+   switch (deal_type)
+   {
+   case DEAL_TYPE_BUY:
+      return "Buy";
+   case DEAL_TYPE_SELL:
+      return "Sell";
+   case DEAL_TYPE_BALANCE:
+      return "Balance";
+   case DEAL_TYPE_CREDIT:
+      return "Credit";
+   case DEAL_TYPE_CHARGE:
+      return "Charge";
+   case DEAL_TYPE_CORRECTION:
+      return "Correction";
+   case DEAL_TYPE_BONUS:
+      return "Bonus";
+   case DEAL_TYPE_COMMISSION:
+      return "Commission";
+   case DEAL_TYPE_COMMISSION_DAILY:
+      return "Daily Commission";
+   case DEAL_TYPE_COMMISSION_MONTHLY:
+      return "Monthly Commission";
+   case DEAL_TYPE_COMMISSION_AGENT_DAILY:
+      return "Agent Daily Commission";
+   case DEAL_TYPE_COMMISSION_AGENT_MONTHLY:
+      return "Agent Monthly Commission";
+   case DEAL_TYPE_INTEREST:
+      return "Interest";
+   case DEAL_TYPE_BUY_CANCELED:
+      return "Buy Canceled";
+   case DEAL_TYPE_SELL_CANCELED:
+      return "Sell Canceled";
+   default:
+      return "Unknown";
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Simple function to check if deal is an actual trade              |
+//+------------------------------------------------------------------+
+bool IsActualTrade(ulong deal_ticket)
+{
+   long deal_entry = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
+   long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
+
+   // Must be entry/exit AND must be buy/sell
+   return (deal_entry == DEAL_ENTRY_IN || deal_entry == DEAL_ENTRY_OUT) &&
+          (deal_type == DEAL_TYPE_BUY || deal_type == DEAL_TYPE_SELL);
+}
+
+//+------------------------------------------------------------------+
+//| Auto Trade Function with TP/SL in Pips                          |
+//+------------------------------------------------------------------+
+// #include <Trade/Trade.mqh>
+
+// Global trade object (declared on top)
+// CTrade trade;
+
+// Enum for trade direction
+enum ENUM_TRADE_DIRECTION
+{
+   TRADE_BUY,
+   TRADE_SELL
+};
+
+//+------------------------------------------------------------------+
+//| Main auto trade function                                         |
+//+------------------------------------------------------------------+
+bool AutoTrade(ENUM_TRADE_DIRECTION direction, 
+               double lots, 
+               int tp_pips, 
+               int sl_pips,
+               string comment = "")
+{
+   // Get current price
+   double price = 0;
+   double sl_price = 0;
+   double tp_price = 0;
+   
+   // Calculate point value for pips
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   
+   // Adjust for 5-digit/3-digit brokers
+   double pip_value = point;
+   // if (digits == 5 || digits == 3)
+   //    pip_value = point * 10;
+   
+   // Get prices based on direction
+   if (direction == TRADE_BUY)
+   {
+      price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+      
+      // Calculate SL and TP for BUY
+      if (sl_pips > 0)
+         sl_price = price - (sl_pips * pip_value);
+      
+      if (tp_pips > 0)
+         tp_price = price + (tp_pips * pip_value);
+   }
+   else // SELL
+   {
+      price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      
+      // Calculate SL and TP for SELL
+      if (sl_pips > 0)
+         sl_price = price + (sl_pips * pip_value);
+      
+      if (tp_pips > 0)
+         tp_price = price - (tp_pips * pip_value);
+   }
+   
+   // Normalize prices
+   price = NormalizeDouble(price, digits);
+   sl_price = NormalizeDouble(sl_price, digits);
+   tp_price = NormalizeDouble(tp_price, digits);
+   
+   // Validate lot size
+   double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   
+   if (lots < min_lot)
+   {
+      Print("Lot size too small. Minimum: ", min_lot);
+      return false;
+   }
+   
+   if (lots > max_lot)
+   {
+      Print("Lot size too large. Maximum: ", max_lot);
+      return false;
+   }
+   
+   // Normalize lot size to step
+   lots = NormalizeDouble(lots, 2);
+   
+   // Execute the trade
+   bool result = false;
+   
+   if (direction == TRADE_BUY)
+   {
+      result = trade.Buy(lots, _Symbol, price, sl_price, tp_price, comment);
+   }
+   else
+   {
+      result = trade.Sell(lots, _Symbol, price, sl_price, tp_price, comment);
+   }
+   
+   // Check result
+   if (result)
+   {
+      PrintFormat("Trade executed successfully: %s %.2f lots at %.5f, SL: %.5f, TP: %.5f",
+                  direction == TRADE_BUY ? "BUY" : "SELL",
+                  lots, price, sl_price, tp_price);
+      
+      // Get ticket number
+      ulong ticket = trade.ResultOrder();
+      Print("Order ticket: ", ticket);
+   }
+   else
+   {
+      Print("Trade failed. Error: ", GetLastError());
+      Print("Error description: ", trade.ResultRetcodeDescription());
+   }
+   
+   return result;
+}
+
+//+------------------------------------------------------------------+
+//| Get correct pip value for any symbol                             |
+//+------------------------------------------------------------------+
+double GetPipValue(string symbol)
+{
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   
+   // For metals (Gold, Silver)
+   if (StringFind(symbol, "XAU") >= 0 || 
+       StringFind(symbol, "XAG") >= 0 || 
+       StringFind(symbol, "GOLD") >= 0 || 
+       StringFind(symbol, "SILVER") >= 0)
+   {
+      // Gold/Silver: 1 pip = 0.10 (regardless of 2 or 3 decimals)
+      return 0.10;
+   }
+   
+   // For JPY pairs
+   if (StringFind(symbol, "JPY") >= 0)
+   {
+      if (digits == 3)
+         return 0.01;  // 3-digit JPY: 1 pip = 0.01
+      else
+         return 0.01;  // 2-digit JPY: 1 pip = 0.01
+   }
+   
+   // For standard forex pairs
+   if (digits == 5)
+      return 0.0001;  // 5-digit: 1 pip = 0.0001
+   else if (digits == 4)
+      return 0.0001;  // 4-digit: 1 pip = 0.0001
+   else if (digits == 3)
+      return 0.01;    // 3-digit: 1 pip = 0.01
+   else if (digits == 2)
+      return 0.01;    // 2-digit: 1 pip = 0.01
+   
+   // Fallback
+   return point * 10;
+}
+
+//+------------------------------------------------------------------+
+//| Auto trade with EXACT pip count enforcement                      |
+//+------------------------------------------------------------------+
+bool AutoTradeExact(ENUM_TRADE_DIRECTION direction, 
+                    double lots, 
+                    int tp_pips, 
+                    int sl_pips,
+                    string comment = "")
+{
+   double price = 0;
+   double sl_price = 0;
+   double tp_price = 0;
+   
+   double pip_value = GetPipValue(_Symbol);
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   
+   // Get entry price
+   if (direction == TRADE_BUY)
+      price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   else
+      price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   
+   price = NormalizeDouble(price, digits);
+   
+   // Calculate TP and SL with EXACT pip distances
+   if (direction == TRADE_BUY)
+   {
+      if (sl_pips > 0)
+         sl_price = NormalizeDouble(price - (sl_pips * pip_value), digits);
+      
+      if (tp_pips > 0)
+         tp_price = NormalizeDouble(price + (tp_pips * pip_value), digits);
+   }
+   else
+   {
+      if (sl_pips > 0)
+         sl_price = NormalizeDouble(price + (sl_pips * pip_value), digits);
+      
+      if (tp_pips > 0)
+         tp_price = NormalizeDouble(price - (tp_pips * pip_value), digits);
+   }
+   
+   // Verify and log
+   Print("=== EXACT PIP CALCULATION ===");
+   PrintFormat("Pip Value: %.5f", pip_value);
+   PrintFormat("Entry Price: %.5f", price);
+   
+   if (tp_pips > 0)
+   {
+      double tp_distance = MathAbs(tp_price - price);
+      double tp_pips_calculated = tp_distance / pip_value;
+      PrintFormat("TP: %.5f | Distance: %.5f | Pips: %.2f (requested: %d)", 
+                  tp_price, tp_distance, tp_pips_calculated, tp_pips);
+   }
+   
+   if (sl_pips > 0)
+   {
+      double sl_distance = MathAbs(price - sl_price);
+      double sl_pips_calculated = sl_distance / pip_value;
+      PrintFormat("SL: %.5f | Distance: %.5f | Pips: %.2f (requested: %d)", 
+                  sl_price, sl_distance, sl_pips_calculated, sl_pips);
+   }
+   
+   // Execute
+   bool result = false;
+   
+   if (direction == TRADE_BUY)
+      result = trade.Buy(lots, _Symbol, price, sl_price, tp_price, comment);
+   else
+      result = trade.Sell(lots, _Symbol, price, sl_price, tp_price, comment);
+   
+   return result;
+}
+
+//+------------------------------------------------------------------+
+//| Check if trading is allowed                                      |
+//+------------------------------------------------------------------+
+bool IsTradeAllowed()
+{
+   // Check if AutoTrading is enabled in terminal
+   if (!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
+   {
+      Print("AutoTrading is disabled in terminal");
+      return false;
+   }
+   
+   // Check if trading is allowed for this EA
+   if (!MQLInfoInteger(MQL_TRADE_ALLOWED))
+   {
+      Print("Trading is not allowed for this EA. Check 'Allow live trading' in properties");
+      return false;
+   }
+   
+   // Check if account allows trading
+   if (!AccountInfoInteger(ACCOUNT_TRADE_ALLOWED))
+   {
+      Print("Trading is forbidden for this account");
+      return false;
+   }
+   
+   // Check if trading is allowed for the symbol
+   if (!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE))
+   {
+      Print("Trading is disabled for ", _Symbol);
+      return false;
+   }
+   
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Advanced auto trade with price validation                        |
+//+------------------------------------------------------------------+
+bool AutoTradeAdvanced(ENUM_TRADE_DIRECTION direction,
+                       double lots,
+                       int tp_pips,
+                       int sl_pips,
+                       string comment = "",
+                       ulong magic = 0,
+                       ulong deviation = 10)
+{
+   // Set magic number and deviation
+   if (magic > 0)
+      trade.SetExpertMagicNumber(magic);
+   
+   trade.SetDeviationInPoints(deviation);
+   
+   // Validate trading conditions
+   if (!IsTradeAllowed())
+   {
+      Print("Trading not allowed");
+      return false;
+   }
+   
+   // Check if market is open
+   if (!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE))
+   {
+      Print("Market is closed for ", _Symbol);
+      return false;
+   }
+   
+   // Execute trade
+   return AutoTrade(direction, lots, tp_pips, sl_pips, comment);
+}
+
+//+------------------------------------------------------------------+
+//| Auto trade with percentage-based position sizing                 |
+//+------------------------------------------------------------------+
+bool AutoTradeWithRisk(ENUM_TRADE_DIRECTION direction,
+                       double risk_percent,
+                       int tp_pips,
+                       int sl_pips,
+                       string comment = "")
+{
+   if (sl_pips <= 0)
+   {
+      Print("SL pips must be greater than 0 for risk-based position sizing");
+      return false;
+   }
+   
+   // Calculate lot size based on risk
+   double lots = CalculateLotSize(risk_percent, sl_pips);
+   
+   if (lots <= 0)
+   {
+      Print("Calculated lot size is invalid: ", lots);
+      return false;
+   }
+   
+   Print("Calculated lot size based on ", risk_percent, "% risk: ", lots);
+   
+   return AutoTrade(direction, lots, tp_pips, sl_pips, comment);
+}
+
+//+------------------------------------------------------------------+
+//| Calculate lot size based on risk percentage                      |
+//+------------------------------------------------------------------+
+double CalculateLotSize(double risk_percent, int sl_pips)
+{
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double risk_amount = balance * (risk_percent / 100.0);
+   
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   
+   // Adjust for 5-digit/3-digit brokers
+   double pip_value = point;
+   if (digits == 5 || digits == 3)
+      pip_value = point * 10;
+   
+   double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+   
+   // Calculate lot size
+   double sl_distance = sl_pips * pip_value;
+   double lots = risk_amount / (sl_distance / tick_size * tick_value);
+   
+   // Normalize to lot step
+   double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   lots = MathFloor(lots / lot_step) * lot_step;
+   
+   // Ensure within limits
+   double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   
+   if (lots < min_lot) lots = min_lot;
+   if (lots > max_lot) lots = max_lot;
+   
+   return NormalizeDouble(lots, 2);
+}
+
+//+------------------------------------------------------------------+
+//| Close all positions                                              |
+//+------------------------------------------------------------------+
+int CloseAllPositions(string symbol = "")
+{
+   int closed = 0;
+   
+   for (int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      
+      if (ticket > 0)
+      {
+         string pos_symbol = PositionGetString(POSITION_SYMBOL);
+         
+         // Filter by symbol if specified
+         if (symbol != "" && pos_symbol != symbol)
+            continue;
+         
+         if (trade.PositionClose(ticket))
+         {
+            Print("Position closed: ", ticket);
+            closed++;
+         }
+         else
+         {
+            Print("Failed to close position: ", ticket, " Error: ", GetLastError());
+         }
+      }
+   }
+   
+   return closed;
+}
+
+//+------------------------------------------------------------------+
+//| Modify existing position TP/SL                                   |
+//+------------------------------------------------------------------+
+bool ModifyPosition(ulong ticket, int tp_pips, int sl_pips)
+{
+   if (!PositionSelectByTicket(ticket))
+   {
+      Print("Position not found: ", ticket);
+      return false;
+   }
+   
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   
+   double pip_value = point;
+   if (digits == 5 || digits == 3)
+      pip_value = point * 10;
+   
+   double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
+   long type = PositionGetInteger(POSITION_TYPE);
+   
+   double sl_price = 0;
+   double tp_price = 0;
+   
+   if (type == POSITION_TYPE_BUY)
+   {
+      if (sl_pips > 0)
+         sl_price = open_price - (sl_pips * pip_value);
+      if (tp_pips > 0)
+         tp_price = open_price + (tp_pips * pip_value);
+   }
+   else // SELL
+   {
+      if (sl_pips > 0)
+         sl_price = open_price + (sl_pips * pip_value);
+      if (tp_pips > 0)
+         tp_price = open_price - (tp_pips * pip_value);
+   }
+   
+   sl_price = NormalizeDouble(sl_price, digits);
+   tp_price = NormalizeDouble(tp_price, digits);
+   
+   return trade.PositionModify(ticket, sl_price, tp_price);
+}
+
+//+------------------------------------------------------------------+
+//| Get current account balance                                      |
+//+------------------------------------------------------------------+
+double GetAccountBalance()
+{
+   return AccountInfoDouble(ACCOUNT_BALANCE);
+}
+
+
+#import "MQLBridge.dll"
+#import
+
+#import "user32.dll"
+long WindowFromPoint(int x, int y);
+long GetForegroundWindow();
+#import

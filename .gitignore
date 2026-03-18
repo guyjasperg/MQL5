@@ -1,0 +1,57 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build artifacts
+bin/
+obj/
+
+# MQLBridge outputs
+MQLBridge/bin/
+MQLBridge/obj/
+MQLBridge/**/bin/
+MQLBridge/**/obj/
+MQLBridge/*.user
+MQLBridge/*.suo
+MQLBridge/*.cache
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+
+# Rider / JetBrains
+.idea/
+*.iml
+
+# Node
+node_modules/
+
+# Ignore build output folders in root, if any
+Build/
+Release/
+Debug/
+
+# MQL/MetaTrader generated files
+*.ex4
+*.ex5
+*.mqh
+*.ex
+*.mq4
+
+# Ignore compiled translator DLL caches, etc.
+*.dll
+
+# Keep your custom include, source, and scripts under version control
