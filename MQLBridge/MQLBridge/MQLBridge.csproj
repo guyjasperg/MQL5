@@ -70,6 +70,12 @@
     <Compile Include="frmTradeHistory.Designer.cs">
       <DependentUpon>frmTradeHistory.cs</DependentUpon>
     </Compile>
+    <Compile Include="frmTradingHours.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="frmTradingHours.Designer.cs">
+      <DependentUpon>frmTradingHours.cs</DependentUpon>
+    </Compile>
     <Compile Include="frmUI.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -86,6 +92,9 @@
   <ItemGroup>
     <EmbeddedResource Include="frmTradeHistory.resx">
       <DependentUpon>frmTradeHistory.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="frmTradingHours.resx">
+      <DependentUpon>frmTradingHours.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="frmUI.resx">
       <DependentUpon>frmUI.cs</DependentUpon>
@@ -127,6 +136,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\left.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Screenshot 2026-03-19 204031.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\trading.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

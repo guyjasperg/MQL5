@@ -89,12 +89,6 @@ namespace MQLBridge
             }
         }
 
-        public void btnTest_Click(object sender, EventArgs e)
-        {
-            string sDate = dtDate.Value.ToString("yyyy.MM.dd");
-            OnUICommand?.Invoke(3, sDate);
-        }
-
         // PSEUDOCODE / PLAN:
         // - Start from the current date shown in dtDate (use the Date property to ignore time).
         // - If the current date is already DateTime.MinValue, do nothing (can't go earlier).
@@ -338,6 +332,23 @@ namespace MQLBridge
         private void button1_Click(object sender, EventArgs e)
         {
             SendBuySellCommand("BUY");
+        }
+
+        private void btnSetDate_Click(object sender, EventArgs e)
+        {
+            string sDate = dtDate.Value.ToString("yyyy.MM.dd");
+            OnUICommand?.Invoke((int)UIMessageIDs.SetS1Days, sDate);
+        }
+
+        private void btnBuy_Click(object sender, EventArgs e)
+        {
+            SendBuySellCommand("BUY");
+        }
+
+        private void btnMarketHours_Click(object sender, EventArgs e)
+        {
+            frmTradingHours frm = new frmTradingHours();
+            frm.Show();
         }
     }
 }
