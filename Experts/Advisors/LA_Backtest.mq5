@@ -16,15 +16,7 @@ struct GenericEvent
    uchar StringValue[128]; // 64 U nicode chars = 128 bytes
 };
 
-// #import "MQLBridge.dll"
-// #import
-
-// #import "user32.dll"
-//    long WindowFromPoint(int x, int y);
-//    long GetForegroundWindow();
-// #import
-
-//Make sure this is in sync with the C# enum UIMessageIDs
+// Make sure this is in sync with the C# enum UIMessageIDs
 enum UIMessageIDs
 {
    BarData = 1,
@@ -36,6 +28,8 @@ enum UIMessageIDs
    BuySell = 7,
    TradeExecuted = 8,
    AccountBalance = 9,
+   TradeHistory = 10,
+   GoToTrade = 11,
    FormClosed = 9999
 };
 
@@ -132,6 +126,7 @@ void OnDeinit(const int reason)
    RemoveAllLines();
    EventKillTimer();
    ObjectDelete(0, "UI_Countdown_Label");
+   DeleteAllPositionArrows();
    Print("Daily High Close Lines EA deinitialized");
    // MyUI.Destroy(reason);
    // ExpertRemove(); // Ensure the EA is removed from the chart
@@ -1458,7 +1453,7 @@ bool ProcessUIEvent(string eventMessage)
 
    case SetS1Days:
    {
-      datetime _currentDate = StringToTime(eventData);
+      _currentDate = StringToTime(eventData);
       datetime nextDate = GetNextTradingDay(_currentDate);
       RemoveAllLines();
       DailyStartHour = -1; // Reset to force re-detection
@@ -1498,14 +1493,14 @@ bool ProcessUIEvent(string eventMessage)
       // Parse: "BUY|0.1|100|50"
       string parts[];
       StringSplit(eventData, '|', parts);
-      
+
       if (ArraySize(parts) == 4)
       {
          string direction = parts[0];
          double lots = StringToDouble(parts[1]);
          int tp = (int)StringToInteger(parts[2]);
          int sl = (int)StringToInteger(parts[3]);
-         
+
          if (direction == "BUY")
          {
             AutoTrade(TRADE_BUY, lots, tp, sl, "UI Trade");
@@ -1516,6 +1511,88 @@ bool ProcessUIEvent(string eventMessage)
          }
 
          SendStringToDLL("TradeExecuted", (int)TradeExecuted);
+      }
+      break;
+   }
+   case TradeHistory:
+   {
+      // request for trade history
+      //  Parse the comma-separated event data: "startDate,endDate"
+      string parts[];
+      int count = StringSplit(eventData, ',', parts);
+
+      if (count >= 2)
+      {
+         datetime start_date = StringToTime(parts[0]);
+         datetime end_date = StringToTime(parts[1]);
+
+         Print("Trade History Request - From: ", TimeToString(start_date, TIME_DATE),
+               " To: ", TimeToString(end_date, TIME_DATE));
+
+         PositionDetails details[];
+         GetAllClosedPositions(start_date, end_date, details);
+         // PrintPositions(details);
+         SendPositionToUI(details);
+         // GetTradeHistory(start_date, end_date);
+      }
+      else
+      {
+         Print("Invalid TradeHistory event data format. Expected: 'startDate,endDate'");
+      }
+      break;
+   }
+   case GoToTrade:
+   {
+      // Parse: "Symbol,Time"
+      string parts[];
+      StringSplit(eventData, ',', parts);
+
+      if (ArraySize(parts) == 2)
+      {
+         long positionId = (long)StringToInteger(parts[0]);
+         datetime time = StringToTime(parts[1]);
+
+         // --- FIX: Use a wider range (±1 day buffer) instead of exact day ---
+         datetime timeStart = time - 86400; // 1 day before
+         datetime timeEnd = time + 86400;   // 1 day after
+
+         bool dealFound = false;
+
+         Print("Attempting to find deal with position ID: ", positionId, " using HistorySelect from ", TimeToString(timeStart), " to ", TimeToString(timeEnd));
+         if (HistorySelect(timeStart, timeEnd))
+         {
+            if (!HistorySelectByPosition(positionId))
+            {
+               Print("No history found for position ID: ", positionId);
+               break;
+            }
+
+            Print("Successfully selected deal with position ID: ", positionId);
+            PositionDetails details;
+
+            if (ExtractPositionData(positionId, details))
+            {
+               Print("Position found - Symbol: ", details.symbol,
+                     " | Entry: ", details.entry_price,
+                     " | Exit: ", details.exit_price);
+
+               int barIndex = iBarShift(_Symbol, _Period, time, false);
+               if (barIndex != -1)
+               {
+                  ChartNavigate(0, CHART_END, -(barIndex + 10));
+               }
+
+               DrawPositionArrows(positionId, details.type == ORDER_TYPE_BUY ? "BUY" : "SELL", StringToTime(details.entry_time), details.entry_price, StringToTime(details.exit_time), details.exit_price);
+            }
+            else
+            {
+               Print("Failed to extract position details for position ID: ", positionId);
+            }
+         }
+      }
+      else
+      {
+         Print("Invalid GoToTrade event data format. Expected: 'Symbol,Time'");
       }
       break;
    }
@@ -1615,17 +1692,17 @@ void UpdateCountdown()
    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, chartWidth / 2);
    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, 20);
 
-   //send to DLL
+   // send to DLL
    clockStr = (_Period <= PERIOD_H1)
                   ? StringFormat("%02d:%02d", m, s)
                   : StringFormat("%02d:%02d:%02d", h, m, s);
    SendStringToDLL(clockStr, (int)CountdownUpdate);
 
-   //also update account balance
+   // also update account balance
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    string balanceStr = StringFormat("Bal: $%.2f", balance);
    SendStringToDLL(balanceStr, (int)AccountBalance);
-   
+
    ChartRedraw(0);
 }
 
@@ -1843,32 +1920,56 @@ void GetTradeHistory(datetime from_date, datetime to_date)
          double deal_profit = HistoryDealGetDouble(deal_ticket, DEAL_PROFIT);
          double deal_volume = HistoryDealGetDouble(deal_ticket, DEAL_VOLUME);
          double deal_price = HistoryDealGetDouble(deal_ticket, DEAL_PRICE);
+
          datetime deal_time = (datetime)HistoryDealGetInteger(deal_ticket, DEAL_TIME);
          string deal_symbol = HistoryDealGetString(deal_ticket, DEAL_SYMBOL);
          string deal_comment = HistoryDealGetString(deal_ticket, DEAL_COMMENT);
 
-         sTradeHistory += StringFormat("%lld,%s,%s,%.2f,%.5f,%.2f,%s,%s\n",
+         // Get TP and SL from associated position
+         double deal_tp = 0.0;
+         double deal_sl = 0.0;
+         long deal_position_id = HistoryDealGetInteger(deal_ticket, DEAL_POSITION_ID);
+
+         if (deal_position_id > 0 && HistorySelectByPosition(deal_position_id))
+         {
+            int pos_deals = HistoryDealsTotal();
+            for (int j = 0; j < pos_deals; j++)
+            {
+               ulong pos_deal = HistoryDealGetTicket(j);
+               if (HistoryDealGetInteger(pos_deal, DEAL_ENTRY) == DEAL_ENTRY_IN)
+               {
+                  deal_tp = HistoryDealGetDouble(pos_deal, DEAL_TP);
+                  deal_sl = HistoryDealGetDouble(pos_deal, DEAL_SL);
+                  break;
+               }
+            }
+         }
+
+         sTradeHistory += StringFormat("%lld,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%s\n",
                                        deal_ticket,
                                        deal_symbol,
                                        GetDealTypeString(deal_type),
                                        deal_volume,
                                        deal_price,
                                        deal_profit,
+                                       deal_tp,
+                                       deal_sl,
                                        TimeToString(deal_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS),
                                        deal_comment);
+         Print(sTradeHistory);
 
-         PrintFormat("Deal #%lld: %s %s %.2f lots at %.5f, Profit: %.2f, Time: %s",
-                     deal_ticket,
-                     deal_symbol,
-                     GetDealTypeString(deal_type),
-                     deal_volume,
-                     deal_price,
-                     deal_profit,
-                     TimeToString(deal_time));
+         if (StringLen(sTradeHistory) > 2000) // Send in batches to avoid hitting limits
+         {
+            // SendStringToDLL(sTradeHistory, (int)TradeHistory);
+            sTradeHistory = ""; // Reset after sending
+         }
       }
    }
 
-   SendStringToDLL(sTradeHistory, 0);
+   if (StringLen(sTradeHistory) > 0) // Send any remaining history data
+   {
+      // SendStringToDLL(sTradeHistory, (int)TradeHistory);
+   }
 }
 
 string GetDealTypeString(long deal_type)
@@ -1941,9 +2042,9 @@ enum ENUM_TRADE_DIRECTION
 //+------------------------------------------------------------------+
 //| Main auto trade function                                         |
 //+------------------------------------------------------------------+
-bool AutoTrade(ENUM_TRADE_DIRECTION direction, 
-               double lots, 
-               int tp_pips, 
+bool AutoTrade(ENUM_TRADE_DIRECTION direction,
+               double lots,
+               int tp_pips,
                int sl_pips,
                string comment = "")
 {
@@ -1951,68 +2052,75 @@ bool AutoTrade(ENUM_TRADE_DIRECTION direction,
    double price = 0;
    double sl_price = 0;
    double tp_price = 0;
-   
+
    // Calculate point value for pips
    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-   
+
+   Print("AutoTrade - Symbol: ", _Symbol, " | Point: ", point, " | Digits: ", digits);
    // Adjust for 5-digit/3-digit brokers
    double pip_value = point;
    // if (digits == 5 || digits == 3)
    //    pip_value = point * 10;
-   
+
    // Get prices based on direction
    if (direction == TRADE_BUY)
    {
       price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-      
+
       // Calculate SL and TP for BUY
       if (sl_pips > 0)
          sl_price = price - (sl_pips * pip_value);
-      
+
       if (tp_pips > 0)
          tp_price = price + (tp_pips * pip_value);
    }
    else // SELL
    {
       price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-      
+
       // Calculate SL and TP for SELL
       if (sl_pips > 0)
          sl_price = price + (sl_pips * pip_value);
-      
+
       if (tp_pips > 0)
          tp_price = price - (tp_pips * pip_value);
    }
-   
+
    // Normalize prices
    price = NormalizeDouble(price, digits);
    sl_price = NormalizeDouble(sl_price, digits);
    tp_price = NormalizeDouble(tp_price, digits);
-   
+
    // Validate lot size
    double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
    double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
    double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-   
+
    if (lots < min_lot)
    {
       Print("Lot size too small. Minimum: ", min_lot);
       return false;
    }
-   
+
    if (lots > max_lot)
    {
       Print("Lot size too large. Maximum: ", max_lot);
       return false;
    }
-   
+
    // Normalize lot size to step
    lots = NormalizeDouble(lots, 2);
-   
+
    // Execute the trade
    bool result = false;
-   
+
+   Print("Attempting to execute trade: ", direction == TRADE_BUY ? "BUY" : "SELL",
+         " ", lots, " lots at ", price,
+         " | SL: ", sl_price,
+         " | TP: ", tp_price);
+   return true; // For testing, skip actual trade execution
+
    if (direction == TRADE_BUY)
    {
       result = trade.Buy(lots, _Symbol, price, sl_price, tp_price, comment);
@@ -2021,14 +2129,14 @@ bool AutoTrade(ENUM_TRADE_DIRECTION direction,
    {
       result = trade.Sell(lots, _Symbol, price, sl_price, tp_price, comment);
    }
-   
+
    // Check result
    if (result)
    {
       PrintFormat("Trade executed successfully: %s %.2f lots at %.5f, SL: %.5f, TP: %.5f",
                   direction == TRADE_BUY ? "BUY" : "SELL",
                   lots, price, sl_price, tp_price);
-      
+
       // Get ticket number
       ulong ticket = trade.ResultOrder();
       Print("Order ticket: ", ticket);
@@ -2038,7 +2146,7 @@ bool AutoTrade(ENUM_TRADE_DIRECTION direction,
       Print("Trade failed. Error: ", GetLastError());
       Print("Error description: ", trade.ResultRetcodeDescription());
    }
-   
+
    return result;
 }
 
@@ -2049,36 +2157,36 @@ double GetPipValue(string symbol)
 {
    double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
-   
+
    // For metals (Gold, Silver)
-   if (StringFind(symbol, "XAU") >= 0 || 
-       StringFind(symbol, "XAG") >= 0 || 
-       StringFind(symbol, "GOLD") >= 0 || 
+   if (StringFind(symbol, "XAU") >= 0 ||
+       StringFind(symbol, "XAG") >= 0 ||
+       StringFind(symbol, "GOLD") >= 0 ||
        StringFind(symbol, "SILVER") >= 0)
    {
       // Gold/Silver: 1 pip = 0.10 (regardless of 2 or 3 decimals)
       return 0.10;
    }
-   
+
    // For JPY pairs
    if (StringFind(symbol, "JPY") >= 0)
    {
       if (digits == 3)
-         return 0.01;  // 3-digit JPY: 1 pip = 0.01
+         return 0.01; // 3-digit JPY: 1 pip = 0.01
       else
-         return 0.01;  // 2-digit JPY: 1 pip = 0.01
+         return 0.01; // 2-digit JPY: 1 pip = 0.01
    }
-   
+
    // For standard forex pairs
    if (digits == 5)
-      return 0.0001;  // 5-digit: 1 pip = 0.0001
+      return 0.0001; // 5-digit: 1 pip = 0.0001
    else if (digits == 4)
-      return 0.0001;  // 4-digit: 1 pip = 0.0001
+      return 0.0001; // 4-digit: 1 pip = 0.0001
    else if (digits == 3)
-      return 0.01;    // 3-digit: 1 pip = 0.01
+      return 0.01; // 3-digit: 1 pip = 0.01
    else if (digits == 2)
-      return 0.01;    // 2-digit: 1 pip = 0.01
-   
+      return 0.01; // 2-digit: 1 pip = 0.01
+
    // Fallback
    return point * 10;
 }
@@ -2086,33 +2194,33 @@ double GetPipValue(string symbol)
 //+------------------------------------------------------------------+
 //| Auto trade with EXACT pip count enforcement                      |
 //+------------------------------------------------------------------+
-bool AutoTradeExact(ENUM_TRADE_DIRECTION direction, 
-                    double lots, 
-                    int tp_pips, 
+bool AutoTradeExact(ENUM_TRADE_DIRECTION direction,
+                    double lots,
+                    int tp_pips,
                     int sl_pips,
                     string comment = "")
 {
    double price = 0;
    double sl_price = 0;
    double tp_price = 0;
-   
+
    double pip_value = GetPipValue(_Symbol);
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-   
+
    // Get entry price
    if (direction == TRADE_BUY)
       price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    else
       price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   
+
    price = NormalizeDouble(price, digits);
-   
+
    // Calculate TP and SL with EXACT pip distances
    if (direction == TRADE_BUY)
    {
       if (sl_pips > 0)
          sl_price = NormalizeDouble(price - (sl_pips * pip_value), digits);
-      
+
       if (tp_pips > 0)
          tp_price = NormalizeDouble(price + (tp_pips * pip_value), digits);
    }
@@ -2120,40 +2228,40 @@ bool AutoTradeExact(ENUM_TRADE_DIRECTION direction,
    {
       if (sl_pips > 0)
          sl_price = NormalizeDouble(price + (sl_pips * pip_value), digits);
-      
+
       if (tp_pips > 0)
          tp_price = NormalizeDouble(price - (tp_pips * pip_value), digits);
    }
-   
+
    // Verify and log
    Print("=== EXACT PIP CALCULATION ===");
    PrintFormat("Pip Value: %.5f", pip_value);
    PrintFormat("Entry Price: %.5f", price);
-   
+
    if (tp_pips > 0)
    {
       double tp_distance = MathAbs(tp_price - price);
       double tp_pips_calculated = tp_distance / pip_value;
-      PrintFormat("TP: %.5f | Distance: %.5f | Pips: %.2f (requested: %d)", 
+      PrintFormat("TP: %.5f | Distance: %.5f | Pips: %.2f (requested: %d)",
                   tp_price, tp_distance, tp_pips_calculated, tp_pips);
    }
-   
+
    if (sl_pips > 0)
    {
       double sl_distance = MathAbs(price - sl_price);
       double sl_pips_calculated = sl_distance / pip_value;
-      PrintFormat("SL: %.5f | Distance: %.5f | Pips: %.2f (requested: %d)", 
+      PrintFormat("SL: %.5f | Distance: %.5f | Pips: %.2f (requested: %d)",
                   sl_price, sl_distance, sl_pips_calculated, sl_pips);
    }
-   
+
    // Execute
    bool result = false;
-   
+
    if (direction == TRADE_BUY)
       result = trade.Buy(lots, _Symbol, price, sl_price, tp_price, comment);
    else
       result = trade.Sell(lots, _Symbol, price, sl_price, tp_price, comment);
-   
+
    return result;
 }
 
@@ -2168,28 +2276,28 @@ bool IsTradeAllowed()
       Print("AutoTrading is disabled in terminal");
       return false;
    }
-   
+
    // Check if trading is allowed for this EA
    if (!MQLInfoInteger(MQL_TRADE_ALLOWED))
    {
       Print("Trading is not allowed for this EA. Check 'Allow live trading' in properties");
       return false;
    }
-   
+
    // Check if account allows trading
    if (!AccountInfoInteger(ACCOUNT_TRADE_ALLOWED))
    {
       Print("Trading is forbidden for this account");
       return false;
    }
-   
+
    // Check if trading is allowed for the symbol
    if (!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE))
    {
       Print("Trading is disabled for ", _Symbol);
       return false;
    }
-   
+
    return true;
 }
 
@@ -2207,23 +2315,23 @@ bool AutoTradeAdvanced(ENUM_TRADE_DIRECTION direction,
    // Set magic number and deviation
    if (magic > 0)
       trade.SetExpertMagicNumber(magic);
-   
+
    trade.SetDeviationInPoints(deviation);
-   
+
    // Validate trading conditions
    if (!IsTradeAllowed())
    {
       Print("Trading not allowed");
       return false;
    }
-   
+
    // Check if market is open
    if (!SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE))
    {
       Print("Market is closed for ", _Symbol);
       return false;
    }
-   
+
    // Execute trade
    return AutoTrade(direction, lots, tp_pips, sl_pips, comment);
 }
@@ -2242,18 +2350,18 @@ bool AutoTradeWithRisk(ENUM_TRADE_DIRECTION direction,
       Print("SL pips must be greater than 0 for risk-based position sizing");
       return false;
    }
-   
+
    // Calculate lot size based on risk
    double lots = CalculateLotSize(risk_percent, sl_pips);
-   
+
    if (lots <= 0)
    {
       Print("Calculated lot size is invalid: ", lots);
       return false;
    }
-   
+
    Print("Calculated lot size based on ", risk_percent, "% risk: ", lots);
-   
+
    return AutoTrade(direction, lots, tp_pips, sl_pips, comment);
 }
 
@@ -2264,33 +2372,35 @@ double CalculateLotSize(double risk_percent, int sl_pips)
 {
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    double risk_amount = balance * (risk_percent / 100.0);
-   
+
    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-   
+
    // Adjust for 5-digit/3-digit brokers
    double pip_value = point;
    if (digits == 5 || digits == 3)
       pip_value = point * 10;
-   
+
    double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
    double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-   
+
    // Calculate lot size
    double sl_distance = sl_pips * pip_value;
    double lots = risk_amount / (sl_distance / tick_size * tick_value);
-   
+
    // Normalize to lot step
    double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
    lots = MathFloor(lots / lot_step) * lot_step;
-   
+
    // Ensure within limits
    double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
    double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-   
-   if (lots < min_lot) lots = min_lot;
-   if (lots > max_lot) lots = max_lot;
-   
+
+   if (lots < min_lot)
+      lots = min_lot;
+   if (lots > max_lot)
+      lots = max_lot;
+
    return NormalizeDouble(lots, 2);
 }
 
@@ -2300,19 +2410,19 @@ double CalculateLotSize(double risk_percent, int sl_pips)
 int CloseAllPositions(string symbol = "")
 {
    int closed = 0;
-   
+
    for (int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
-      
+
       if (ticket > 0)
       {
          string pos_symbol = PositionGetString(POSITION_SYMBOL);
-         
+
          // Filter by symbol if specified
          if (symbol != "" && pos_symbol != symbol)
             continue;
-         
+
          if (trade.PositionClose(ticket))
          {
             Print("Position closed: ", ticket);
@@ -2324,7 +2434,7 @@ int CloseAllPositions(string symbol = "")
          }
       }
    }
-   
+
    return closed;
 }
 
@@ -2338,20 +2448,20 @@ bool ModifyPosition(ulong ticket, int tp_pips, int sl_pips)
       Print("Position not found: ", ticket);
       return false;
    }
-   
+
    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-   
+
    double pip_value = point;
    if (digits == 5 || digits == 3)
       pip_value = point * 10;
-   
+
    double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
    long type = PositionGetInteger(POSITION_TYPE);
-   
+
    double sl_price = 0;
    double tp_price = 0;
-   
+
    if (type == POSITION_TYPE_BUY)
    {
       if (sl_pips > 0)
@@ -2366,10 +2476,10 @@ bool ModifyPosition(ulong ticket, int tp_pips, int sl_pips)
       if (tp_pips > 0)
          tp_price = open_price - (tp_pips * pip_value);
    }
-   
+
    sl_price = NormalizeDouble(sl_price, digits);
    tp_price = NormalizeDouble(tp_price, digits);
-   
+
    return trade.PositionModify(ticket, sl_price, tp_price);
 }
 
@@ -2381,6 +2491,604 @@ double GetAccountBalance()
    return AccountInfoDouble(ACCOUNT_BALANCE);
 }
 
+//+------------------------------------------------------------------+
+//| Structure to hold complete position data                         |
+//+------------------------------------------------------------------+
+struct PositionDetails
+{
+   ulong position_id;
+   ulong entry_ticket;
+   ulong exit_ticket;
+   string symbol;
+   long type; // DEAL_TYPE_BUY or DEAL_TYPE_SELL
+   double volume;
+   double entry_price;
+   double exit_price;
+   double sl_price;
+   double tp_price;
+   datetime entry_time;
+   datetime exit_time;
+   double profit;
+   double commission;
+   double swap;
+   double net_profit;
+   long magic;
+   string comment;
+   int sl_pips;
+   int tp_pips;
+   int profit_pips;
+};
+
+//+------------------------------------------------------------------+
+//| Get all closed positions with detailed debugging                 |
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Get all closed positions - GUARANTEED to process all deals       |
+//+------------------------------------------------------------------+
+int GetAllClosedPositions(datetime from_date,
+                          datetime to_date,
+                          PositionDetails &positions[],
+                          string filter_symbol = "")
+{
+   // CRITICAL: Store the date range for re-selection
+   datetime history_from = from_date;
+   datetime history_to = to_date;
+
+   if (!HistorySelect(history_from, history_to))
+   {
+      Print("ERROR: Failed to select history!");
+      return 0;
+   }
+
+   ArrayResize(positions, 0);
+   ulong processed_ids[];
+   ArrayResize(processed_ids, 0);
+
+   int total_deals = HistoryDealsTotal();
+   Print("Total deals: ", total_deals);
+
+   // FIRST: Collect all position IDs from exit deals
+   Print("Step 1: Collecting position IDs...");
+
+   for (int i = 0; i < total_deals; i++)
+   {
+      ulong deal_ticket = HistoryDealGetTicket(i);
+
+      if (deal_ticket <= 0)
+         continue;
+
+      long deal_entry = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
+      long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
+
+      bool is_exit = (deal_entry == DEAL_ENTRY_OUT || deal_entry == DEAL_ENTRY_INOUT);
+      bool is_trade = (deal_type == DEAL_TYPE_BUY || deal_type == DEAL_TYPE_SELL);
+
+      if (!is_exit || !is_trade)
+         continue;
+
+      ulong position_id = HistoryDealGetInteger(deal_ticket, DEAL_POSITION_ID);
+      string symbol = HistoryDealGetString(deal_ticket, DEAL_SYMBOL);
+
+      // Filter by symbol
+      if (filter_symbol != "" && symbol != filter_symbol)
+         continue;
+
+      // Check if already in list
+      bool already_in_list = false;
+      for (int j = 0; j < ArraySize(processed_ids); j++)
+      {
+         if (processed_ids[j] == position_id)
+         {
+            already_in_list = true;
+            break;
+         }
+      }
+
+      if (!already_in_list)
+      {
+         int idx = ArraySize(processed_ids);
+         ArrayResize(processed_ids, idx + 1);
+         processed_ids[idx] = position_id;
+      }
+   }
+
+   Print("Found ", ArraySize(processed_ids), " unique positions to extract");
+
+   // SECOND: Extract each position
+   Print("Step 2: Extracting position details...");
+
+   for (int i = 0; i < ArraySize(processed_ids); i++)
+   {
+      ulong position_id = processed_ids[i];
+
+      Print("Extracting position ", i + 1, "/", ArraySize(processed_ids), " (ID: ", position_id, ")");
+
+      PositionDetails details;
+      if (ExtractPositionData(position_id, details))
+      {
+         int idx = ArraySize(positions);
+         ArrayResize(positions, idx + 1);
+         positions[idx] = details;
+      }
+      else
+      {
+         Print("  FAILED to extract position #", position_id);
+      }
+
+      // CRITICAL: Restore history selection for next iteration
+      // (ExtractPositionData changes it with HistorySelectByPosition)
+      if (i < ArraySize(processed_ids) - 1) // Not needed on last iteration
+      {
+         HistorySelect(history_from, history_to);
+      }
+   }
+
+   Print("");
+   Print("========== FINAL RESULT ==========");
+   Print("Positions extracted: ", ArraySize(positions), " out of ", ArraySize(processed_ids));
+   Print("==================================");
+
+   return ArraySize(positions);
+}
+
+//+------------------------------------------------------------------+
+//| Check if position already processed                              |
+//+------------------------------------------------------------------+
+bool IsPositionProcessed(const ulong &processed_ids[], ulong position_id)
+{
+   for (int i = 0; i < ArraySize(processed_ids); i++)
+   {
+      if (processed_ids[i] == position_id)
+         return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Extract complete position data - WITH DETAILED DEBUG             |
+//+------------------------------------------------------------------+
+bool ExtractPositionData(ulong position_id, PositionDetails &details)
+{
+   Print("  >> ExtractPositionData for position #", position_id);
+
+   if (!HistorySelectByPosition(position_id))
+   {
+      Print("  >> ERROR: HistorySelectByPosition FAILED for position #", position_id);
+      Print("  >> Error code: ", GetLastError());
+      return false;
+   }
+
+   int total = HistoryDealsTotal();
+   Print("  >> Found ", total, " deals for this position");
+
+   if (total == 0)
+   {
+      Print("  >> ERROR: No deals found for position #", position_id);
+      return false;
+   }
+
+   details.position_id = position_id;
+   details.entry_price = 0;
+   details.exit_price = 0;
+   details.sl_price = 0;
+   details.tp_price = 0;
+   details.profit = 0;
+   details.commission = 0;
+   details.swap = 0;
+   details.sl_pips = 0;
+   details.tp_pips = 0;
+   details.profit_pips = 0;
+
+   bool has_entry = false;
+   bool has_exit = false;
+
+   for (int i = 0; i < total; i++)
+   {
+      ulong ticket = HistoryDealGetTicket(i);
+      long entry = HistoryDealGetInteger(ticket, DEAL_ENTRY);
+      long type = HistoryDealGetInteger(ticket, DEAL_TYPE);
+
+      Print("  >> Deal ", i, ": Ticket=", ticket, ", Entry=", entry, ", Type=", type);
+
+      // Skip non-trade deals
+      if (type != DEAL_TYPE_BUY && type != DEAL_TYPE_SELL)
+      {
+         Print("  >> Skipping non-trade deal");
+         continue;
+      }
+
+      // ENTRY DEAL
+      if (entry == DEAL_ENTRY_IN)
+      {
+         Print("  >> Processing ENTRY deal");
+         details.entry_ticket = ticket;
+         details.type = type;
+         details.symbol = HistoryDealGetString(ticket, DEAL_SYMBOL);
+         details.volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
+         details.entry_price = HistoryDealGetDouble(ticket, DEAL_PRICE);
+         details.entry_time = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
+         details.magic = HistoryDealGetInteger(ticket, DEAL_MAGIC);
+         details.comment = HistoryDealGetString(ticket, DEAL_COMMENT);
+         details.sl_price = HistoryDealGetDouble(ticket, DEAL_SL);
+         details.tp_price = HistoryDealGetDouble(ticket, DEAL_TP);
+         details.commission += HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+         details.swap += HistoryDealGetDouble(ticket, DEAL_SWAP);
+         has_entry = true;
+         Print("  >> Entry price: ", details.entry_price);
+      }
+      // EXIT DEAL
+      else if (entry == DEAL_ENTRY_OUT)
+      {
+         Print("  >> Processing EXIT deal");
+         details.exit_ticket = ticket;
+         details.exit_price = HistoryDealGetDouble(ticket, DEAL_PRICE);
+         details.exit_time = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
+         details.profit += HistoryDealGetDouble(ticket, DEAL_PROFIT);
+         details.commission += HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+         details.swap += HistoryDealGetDouble(ticket, DEAL_SWAP);
+         has_exit = true;
+         Print("  >> Exit price: ", details.exit_price);
+      }
+   }
+
+   // Calculate net profit
+   details.net_profit = details.profit + details.commission + details.swap;
+
+   Print("  >> Has Entry: ", has_entry, ", Has Exit: ", has_exit);
+   Print("  >> Entry Price: ", details.entry_price, ", Exit Price: ", details.exit_price);
+
+   // Validation
+   if (!has_entry || !has_exit)
+   {
+      Print("  >> ERROR: Missing entry or exit deal!");
+      return false;
+   }
+
+   if (details.entry_price <= 0 || details.exit_price <= 0)
+   {
+      Print("  >> ERROR: Invalid prices! Entry=", details.entry_price, ", Exit=", details.exit_price);
+      return false;
+   }
+
+   // Calculate pips
+   double pip_value = GetPipValue(details.symbol);
+
+   if (details.sl_price > 0)
+   {
+      // double sl_distance = MathAbs(details.entry_price - details.sl_price);
+      // details.sl_pips = (int)MathRound(sl_distance / pip_value);
+
+      details.sl_pips = (int)MathAbs((details.entry_price - details.sl_price) * 100);
+   }
+
+   if (details.tp_price > 0)
+   {
+      // double tp_distance = MathAbs(details.tp_price - details.entry_price);
+      // details.tp_pips = (int)MathRound(tp_distance / pip_value);
+      details.tp_pips = (int)MathAbs((details.entry_price - details.tp_price) * 100);
+   }
+
+   double profit_distance = details.exit_price - details.entry_price;
+   if (details.type == DEAL_TYPE_SELL)
+      profit_distance = -profit_distance;
+
+   details.profit_pips = (int)MathRound(profit_distance * 100);
+
+   Print("  >> SUCCESS: Position extracted");
+   return true;
+}
+
+void SendPositionToUI(PositionDetails &positions[])
+{
+   int count = ArraySize(positions);
+
+   if (count == 0)
+   {
+      Print("No positions found");
+      return;
+   }
+
+   Print("Sending ", count, " positions to UI...");
+
+   string data = "";
+   for (int i = 0; i < count; i++)
+   {
+      PositionDetails pos = positions[i];
+      data += StringFormat("%lld,%s,%.2f,%.2f,%.2f,%d,%d,%.2f,%d,%s,%s\r\n",
+                           pos.position_id,
+                           pos.type == DEAL_TYPE_BUY ? "buy" : "sell",
+                           pos.volume,
+                           pos.entry_price,
+                           pos.exit_price,
+                           pos.sl_pips,
+                           pos.tp_pips,
+                           pos.net_profit,
+                           pos.profit_pips,
+                           TimeToString(pos.entry_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS),
+                           TimeToString(pos.exit_time, TIME_DATE | TIME_MINUTES | TIME_SECONDS));
+
+      if (StringLen(data) > 2000) // Send in batches to avoid hitting limits
+      {
+         SendStringToDLL(data, (int)TradeHistory);
+         data = ""; // Reset after sending
+      }
+   }
+   if (StringLen(data) > 0) // Send any remaining data
+   {
+      SendStringToDLL(data, (int)TradeHistory);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Print all positions in a nice format                             |
+//+------------------------------------------------------------------+
+void PrintPositions(PositionDetails &positions[])
+{
+   int count = ArraySize(positions);
+
+   if (count == 0)
+   {
+      Print("No positions found");
+      return;
+   }
+
+   Print("======================================================");
+   Print("CLOSED POSITIONS - Total: ", count);
+   Print("======================================================");
+   Print("");
+
+   double total_profit = 0;
+   int winning = 0;
+   int losing = 0;
+
+   for (int i = 0; i < count; i++)
+   {
+      PositionDetails pos = positions[i];
+
+      PrintFormat("[%d] Position #%lld", i + 1, pos.position_id);
+      PrintFormat("  Symbol: %s | Type: %s | Lots: %.2f | Magic: %lld",
+                  pos.symbol,
+                  pos.type == DEAL_TYPE_BUY ? "BUY" : "SELL",
+                  pos.volume,
+                  pos.magic);
+      PrintFormat("  Entry: %.2f at %s (Ticket: %lld)",
+                  pos.entry_price,
+                  TimeToString(pos.entry_time, TIME_DATE | TIME_MINUTES),
+                  pos.entry_ticket);
+
+      if (pos.sl_price > 0)
+         PrintFormat("  SL: %.2f (%d pips)", pos.sl_price, pos.sl_pips);
+      else
+         Print("  SL: Not set");
+
+      if (pos.tp_price > 0)
+         PrintFormat("  TP: %.2f (%d pips)", pos.tp_price, pos.tp_pips);
+      else
+         Print("  TP: Not set");
+
+      PrintFormat("  Exit: %.2f at %s (Ticket: %lld)",
+                  pos.exit_price,
+                  TimeToString(pos.exit_time, TIME_DATE | TIME_MINUTES),
+                  pos.exit_ticket);
+      PrintFormat("  Profit: $%.2f (%d pips) | Comm: $%.2f | Swap: $%.2f | Net: $%.2f",
+                  pos.profit,
+                  pos.profit_pips,
+                  pos.commission,
+                  pos.swap,
+                  pos.net_profit);
+
+      if (!StringLen(pos.comment) == 0)
+         PrintFormat("  Comment: %s", pos.comment);
+
+      Print("");
+
+      total_profit += pos.net_profit;
+      if (pos.net_profit > 0)
+         winning++;
+      else if (pos.net_profit < 0)
+         losing++;
+   }
+
+   Print("======================================================");
+   Print("SUMMARY");
+   Print("======================================================");
+   PrintFormat("Total Positions: %d", count);
+   PrintFormat("Winning: %d (%.1f%%)", winning, (double)winning / count * 100);
+   PrintFormat("Losing: %d (%.1f%%)", losing, (double)losing / count * 100);
+   PrintFormat("Total Net Profit: $%.2f", total_profit);
+   Print("======================================================");
+}
+
+//+------------------------------------------------------------------+
+//| Export positions to CSV format                                   |
+//+------------------------------------------------------------------+
+string ExportToCSV(PositionDetails &positions[])
+{
+   string csv = "Position ID,Symbol,Type,Lots,Entry Price,Entry Time,SL,TP,Exit Price,Exit Time,Profit,Commission,Swap,Net Profit,Profit Pips,SL Pips,TP Pips,Magic,Comment\n";
+
+   for (int i = 0; i < ArraySize(positions); i++)
+   {
+      PositionDetails pos = positions[i];
+
+      csv += StringFormat("%lld,%s,%s,%.2f,%.5f,%s,%.5f,%.5f,%.5f,%s,%.2f,%.2f,%.2f,%.2f,%d,%d,%d,%lld,%s\n",
+                          pos.position_id,
+                          pos.symbol,
+                          pos.type == DEAL_TYPE_BUY ? "BUY" : "SELL",
+                          pos.volume,
+                          pos.entry_price,
+                          TimeToString(pos.entry_time, TIME_DATE | TIME_MINUTES),
+                          pos.sl_price,
+                          pos.tp_price,
+                          pos.exit_price,
+                          TimeToString(pos.exit_time, TIME_DATE | TIME_MINUTES),
+                          pos.profit,
+                          pos.commission,
+                          pos.swap,
+                          pos.net_profit,
+                          pos.profit_pips,
+                          pos.sl_pips,
+                          pos.tp_pips,
+                          pos.magic,
+                          pos.comment);
+   }
+
+   return csv;
+}
+
+//+------------------------------------------------------------------+
+//| Send positions to C# UI                                          |
+//+------------------------------------------------------------------+
+void SendPositionsToUI(PositionDetails &positions[])
+{
+   int count = ArraySize(positions);
+
+   Print("Sending ", count, " positions to UI...");
+
+   for (int i = 0; i < count; i++)
+   {
+      PositionDetails pos = positions[i];
+
+      // Format: "position_id,symbol,type,lots,entry,exit,sl,tp,profit,entry_time,exit_time"
+      string data = StringFormat("%lld,%s,%s,%.2f,%.5f,%.5f,%.5f,%.5f,%.2f,%d,%d,%d,%s,%s",
+                                 pos.position_id,
+                                 pos.symbol,
+                                 pos.type == DEAL_TYPE_BUY ? "BUY" : "SELL",
+                                 pos.volume,
+                                 pos.entry_price,
+                                 pos.exit_price,
+                                 pos.sl_price,
+                                 pos.tp_price,
+                                 pos.net_profit,
+                                 pos.profit_pips,
+                                 pos.sl_pips,
+                                 pos.tp_pips,
+                                 TimeToString(pos.entry_time, TIME_DATE | TIME_MINUTES),
+                                 TimeToString(pos.exit_time, TIME_DATE | TIME_MINUTES));
+
+      SendStringToDLL(data, (int)TradeHistory);
+   }
+
+   Print("✓ Sent ", count, " positions to UI");
+}
+
+//+------------------------------------------------------------------+
+// Call this after a position closes, passing its data directly
+//+------------------------------------------------------------------+
+void DrawPositionArrows(
+    ulong ticket,
+    string deal_type,
+    datetime openTime,
+    double openPrice,
+    datetime closeTime,
+    double closePrice)
+{
+   Print("Drawing position arrows for ticket #", ticket, " type: ", deal_type);
+   string openName = "PosOpen_Arrow";
+   string closeName = "PosClose_Arrow";
+   string lineName = "PosLine_Arrow";
+
+   color openArrow = (deal_type == "BUY") ? clrBlue : clrRed;
+   color closeArrow = (deal_type == "BUY") ? clrRed : clrBlue;
+
+   // Determine line color based on profit/loss
+   color lineColor = clrRed;
+
+   DrawLine(lineName, openTime, openPrice, closeTime, closePrice, lineColor, 1, ticket);
+   DrawArrow(openName, openTime, openPrice, deal_type == "BUY", openArrow, 1, "OPEN");
+   DrawArrow(closeName, closeTime, closePrice, deal_type == "BUY", closeArrow, 1, "CLOSE");
+
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+// Draw trend line between open and close
+//+------------------------------------------------------------------+
+void DrawLine(
+    string name,
+    datetime openTime,
+    double openPrice,
+    datetime closeTime,
+    double closePrice,
+    color clr,
+    int width,
+    ulong ticket)
+{
+   if (ObjectFind(0, name) >= 0)
+      ObjectDelete(0, name);
+
+   ObjectCreate(0, name, OBJ_TREND, 0, openTime, openPrice, closeTime, closePrice);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, width);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DOT);
+   ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false); // Don't extend beyond close
+   ObjectSetInteger(0, name, OBJPROP_RAY_LEFT, false);  // Don't extend beyond open
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false); // Draw behind candles
+
+   double pnlPips = (closePrice - openPrice) / _Point;
+   ObjectSetString(0, name, OBJPROP_TOOLTIP,
+                   "Ticket #" + (string)ticket +
+                       "\nOpen:  " + DoubleToString(openPrice, _Digits) +
+                       "\nClose: " + DoubleToString(closePrice, _Digits) +
+                       "\nPnL:   " + DoubleToString(pnlPips, 1) + " pts");
+}
+
+//+------------------------------------------------------------------+
+// Core arrow drawing
+//+------------------------------------------------------------------+
+void DrawArrow(
+    string   name,
+    datetime time,
+    double   price,
+    bool     isBuy,
+    color    clr,
+    int      size,
+    string   label)
+{
+   if (ObjectFind(0, name) >= 0)
+      ObjectDelete(0, name);
+
+   Print("Drawing arrow: ", name, " at ", TimeToString(time, TIME_DATE | TIME_SECONDS), " price: ", DoubleToString(price, _Digits), " type: ", label);
+
+   // Use built-in Buy/Sell arrow object types
+   ENUM_OBJECT arrowType = isBuy ? OBJ_ARROW_BUY : OBJ_ARROW_SELL;
+   if(isBuy && label == "OPEN") 
+      arrowType = OBJ_ARROW_BUY;
+   else if(isBuy && label == "CLOSE") // For closing sell positions, use a different arrow
+      arrowType = OBJ_ARROW_SELL;
+   else if(!isBuy && label == "OPEN")
+      arrowType = OBJ_ARROW_SELL;
+   else if(!isBuy && label == "CLOSE")
+      arrowType = OBJ_ARROW_BUY;
+
+   ObjectCreate(0, name, arrowType, 0, time, price);
+   ObjectSetInteger(0, name, OBJPROP_COLOR,      clr);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH,      size);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN,     true);
+   ObjectSetString(0,  name, OBJPROP_TOOLTIP,
+                   label + " @ " + DoubleToString(price, _Digits)
+                   + "\n" + TimeToString(time, TIME_DATE | TIME_SECONDS));
+   ObjectSetInteger(0, name, OBJPROP_BACK, false); // Draw behind candles
+}
+
+//+------------------------------------------------------------------+
+// Clean up all arrows and lines on EA remove
+//+------------------------------------------------------------------+
+void DeleteAllPositionArrows()
+{
+   for (int i = ObjectsTotal(0) - 1; i >= 0; i--)
+   {
+      string name = ObjectName(0, i);
+      if (StringFind(name, "PosOpen_") == 0 ||
+          StringFind(name, "PosClose_") == 0 ||
+          StringFind(name, "PosLine_") == 0)
+      {
+         ObjectDelete(0, name);
+      }
+   }
+}
 
 #import "MQLBridge.dll"
 #import

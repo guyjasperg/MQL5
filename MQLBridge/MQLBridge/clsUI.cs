@@ -53,6 +53,9 @@ namespace MQLBridge
 
         public static void StartUI(long chartHandle)
         {
+            Logger.Initialize(LogLevel.Debug, 1024 * 1024 * 10);
+            Logger.Info("Starting UI...");
+
             if (_uiThread != null && _uiThread.IsAlive) return;
 
             IntPtr parentHandle = new IntPtr(chartHandle);
@@ -161,6 +164,8 @@ namespace MQLBridge
             }
             _commandQueue.Enqueue(evt);
             _lastHeartbeat = DateTime.Now;
+
+            Logger.Info($"Enqueued event: ID={evt.CommandID}, Long={evt.LongValue}, Double={evt.DoubleValue}, String='{evt.StringValue}'");
         }
 
          //[DllExport(CallingConvention = CallingConvention.StdCall)]
@@ -173,6 +178,7 @@ namespace MQLBridge
             if (_commandQueue.TryDequeue(out evt))
             {
                 result = $"{evt.CommandID},";
+                //Logger.Info($"Dequeued event: ID={evt.CommandID}, Long={evt.LongValue}, Double={evt.DoubleValue}, String='{evt.StringValue}'");
                 if (evt.DoubleValue != 0)
                 {
                     result += $"{evt.DoubleValue}";
@@ -276,8 +282,16 @@ namespace MQLBridge
                     }
                     else if (msgID == (int)UIMessageIDs.TradeExecuted)
                     {
+                        Logger.Info("Trade executed...");
                         _form.BeginInvoke(new Action(() => {
                             _form.pnlBuySell.Enabled = true;
+                        }));
+                    }
+                    else if (msgID == (int)UIMessageIDs.TradeHistory)
+                    {
+                        Logger.Info("TradeHistory received...");
+                        _form.BeginInvoke(new Action(() => {
+                            _form.ShowTradeHistory(msg);
                         }));
                     }
                         _lastMessage = msg;
@@ -285,6 +299,7 @@ namespace MQLBridge
                 }
                 catch (Exception ex)
                 {
+                    Logger.Error("Error in SendMessage: " + ex.Message, ex);
                     MessageBox.Show("Error in SendMessage: " + ex.Message);
                     //DO nothing
                     //throw;

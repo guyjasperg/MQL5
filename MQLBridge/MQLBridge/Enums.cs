@@ -11,7 +11,9 @@
         BuySell = 7,
         TradeExecuted = 8,
         AccountBalance = 9,
-        TradeHistory
+        TradeHistory = 10,
+        GoToTrade = 11,
+        FormClosed = 9999
     }
 
 }

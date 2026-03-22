@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             System.Windows.Forms.ListViewItem listViewItem1 = new System.Windows.Forms.ListViewItem(new string[] {
             "",
             "2026-03-15 01:15:19",
@@ -41,41 +42,47 @@
             "9999.99",
             "99999"}, -1);
             this.lvwTrades = new System.Windows.Forms.ListView();
-            this.colTimeOpen = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
-            this.panel1 = new System.Windows.Forms.Panel();
             this.colTicket = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.colOpenTime = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.colType = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.colVolume = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.colPriceOpen = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.colEntryPrice = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.colSL = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.colTP = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.colTimeClose = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.colPriceClose = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.colProfit = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.colExitTime = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.colExitPrice = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.colNetProfit = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.colProfitPips = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
+            this.panel1 = new System.Windows.Forms.Panel();
+            this.btnRefresh = new System.Windows.Forms.Button();
+            this.dtTo = new System.Windows.Forms.DateTimePicker();
+            this.label2 = new System.Windows.Forms.Label();
+            this.dtFrom = new System.Windows.Forms.DateTimePicker();
+            this.label1 = new System.Windows.Forms.Label();
+            this.tmrDelay = new System.Windows.Forms.Timer(this.components);
             this.tableLayoutPanel1.SuspendLayout();
+            this.panel1.SuspendLayout();
             this.SuspendLayout();
             // 
             // lvwTrades
             // 
             this.lvwTrades.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
             this.colTicket,
-            this.colTimeOpen,
+            this.colOpenTime,
             this.colType,
             this.colVolume,
-            this.colPriceOpen,
+            this.colEntryPrice,
             this.colSL,
             this.colTP,
-            this.colTimeClose,
-            this.colPriceClose,
-            this.colProfit,
+            this.colExitTime,
+            this.colExitPrice,
+            this.colNetProfit,
             this.colProfitPips});
             this.lvwTrades.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lvwTrades.FullRowSelect = true;
             this.lvwTrades.GridLines = true;
             this.lvwTrades.HideSelection = false;
-            this.lvwTrades.HoverSelection = true;
             this.lvwTrades.Items.AddRange(new System.Windows.Forms.ListViewItem[] {
             listViewItem1});
             this.lvwTrades.Location = new System.Drawing.Point(3, 95);
@@ -85,12 +92,73 @@
             this.lvwTrades.TabIndex = 0;
             this.lvwTrades.UseCompatibleStateImageBehavior = false;
             this.lvwTrades.View = System.Windows.Forms.View.Details;
+            this.lvwTrades.SelectedIndexChanged += new System.EventHandler(this.lvwTrades_SelectedIndexChanged);
+            this.lvwTrades.MouseDoubleClick += new System.Windows.Forms.MouseEventHandler(this.lvwTrades_MouseDoubleClick);
             // 
-            // colTimeOpen
+            // colTicket
             // 
-            this.colTimeOpen.DisplayIndex = 0;
-            this.colTimeOpen.Text = "Time";
-            this.colTimeOpen.Width = 162;
+            this.colTicket.DisplayIndex = 1;
+            this.colTicket.Text = "";
+            this.colTicket.Width = 0;
+            // 
+            // colOpenTime
+            // 
+            this.colOpenTime.DisplayIndex = 0;
+            this.colOpenTime.Text = "Time";
+            this.colOpenTime.Width = 162;
+            // 
+            // colType
+            // 
+            this.colType.Text = "Type";
+            this.colType.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.colType.Width = 52;
+            // 
+            // colVolume
+            // 
+            this.colVolume.Text = "Vol";
+            this.colVolume.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.colVolume.Width = 53;
+            // 
+            // colEntryPrice
+            // 
+            this.colEntryPrice.Text = "Price";
+            this.colEntryPrice.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.colEntryPrice.Width = 72;
+            // 
+            // colSL
+            // 
+            this.colSL.Text = "SL";
+            this.colSL.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.colSL.Width = 72;
+            // 
+            // colTP
+            // 
+            this.colTP.Text = "TP";
+            this.colTP.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.colTP.Width = 73;
+            // 
+            // colExitTime
+            // 
+            this.colExitTime.Text = "Time Close";
+            this.colExitTime.Width = 163;
+            // 
+            // colExitPrice
+            // 
+            this.colExitPrice.Text = "Price";
+            this.colExitPrice.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.colExitPrice.Width = 89;
+            // 
+            // colNetProfit
+            // 
+            this.colNetProfit.Text = "Profit";
+            this.colNetProfit.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.colNetProfit.Width = 78;
+            // 
+            // colProfitPips
+            // 
+            this.colProfitPips.Text = "Pips";
+            this.colProfitPips.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.colProfitPips.Width = 88;
             // 
             // tableLayoutPanel1
             // 
@@ -109,70 +177,72 @@
             // 
             // panel1
             // 
+            this.panel1.Controls.Add(this.btnRefresh);
+            this.panel1.Controls.Add(this.dtTo);
+            this.panel1.Controls.Add(this.label2);
+            this.panel1.Controls.Add(this.dtFrom);
+            this.panel1.Controls.Add(this.label1);
             this.panel1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panel1.Location = new System.Drawing.Point(3, 3);
             this.panel1.Name = "panel1";
             this.panel1.Size = new System.Drawing.Size(947, 86);
             this.panel1.TabIndex = 1;
             // 
-            // colTicket
+            // btnRefresh
             // 
-            this.colTicket.DisplayIndex = 1;
-            this.colTicket.Text = "";
-            this.colTicket.Width = 0;
+            this.btnRefresh.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.btnRefresh.Location = new System.Drawing.Point(480, 25);
+            this.btnRefresh.Name = "btnRefresh";
+            this.btnRefresh.Size = new System.Drawing.Size(107, 34);
+            this.btnRefresh.TabIndex = 4;
+            this.btnRefresh.Text = "Refresh";
+            this.btnRefresh.UseVisualStyleBackColor = true;
+            this.btnRefresh.Click += new System.EventHandler(this.btnRefresh_Click);
             // 
-            // colType
+            // dtTo
             // 
-            this.colType.Text = "Type";
-            this.colType.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
-            this.colType.Width = 52;
+            this.dtTo.CustomFormat = "yyyy.MM.dd";
+            this.dtTo.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.dtTo.Format = System.Windows.Forms.DateTimePickerFormat.Custom;
+            this.dtTo.Location = new System.Drawing.Point(304, 27);
+            this.dtTo.Name = "dtTo";
+            this.dtTo.Size = new System.Drawing.Size(165, 30);
+            this.dtTo.TabIndex = 3;
             // 
-            // colVolume
+            // label2
             // 
-            this.colVolume.Text = "Vol";
-            this.colVolume.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
-            this.colVolume.Width = 53;
+            this.label2.AutoSize = true;
+            this.label2.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label2.Location = new System.Drawing.Point(257, 32);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(36, 25);
+            this.label2.TabIndex = 2;
+            this.label2.Text = "To";
             // 
-            // colPriceOpen
+            // dtFrom
             // 
-            this.colPriceOpen.Text = "Price";
-            this.colPriceOpen.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.colPriceOpen.Width = 72;
+            this.dtFrom.CustomFormat = "yyyy.MM.dd";
+            this.dtFrom.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.dtFrom.Format = System.Windows.Forms.DateTimePickerFormat.Custom;
+            this.dtFrom.Location = new System.Drawing.Point(81, 27);
+            this.dtFrom.Name = "dtFrom";
+            this.dtFrom.Size = new System.Drawing.Size(165, 30);
+            this.dtFrom.TabIndex = 1;
             // 
-            // colSL
+            // label1
             // 
-            this.colSL.Text = "SL";
-            this.colSL.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.colSL.Width = 72;
+            this.label1.AutoSize = true;
+            this.label1.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label1.Location = new System.Drawing.Point(13, 32);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(57, 25);
+            this.label1.TabIndex = 0;
+            this.label1.Text = "From";
             // 
-            // colTP
+            // tmrDelay
             // 
-            this.colTP.Text = "TP";
-            this.colTP.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.colTP.Width = 73;
-            // 
-            // colTimeClose
-            // 
-            this.colTimeClose.Text = "Time Close";
-            this.colTimeClose.Width = 163;
-            // 
-            // colPriceClose
-            // 
-            this.colPriceClose.Text = "Price Close";
-            this.colPriceClose.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.colPriceClose.Width = 89;
-            // 
-            // colProfit
-            // 
-            this.colProfit.Text = "Profit";
-            this.colProfit.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.colProfit.Width = 78;
-            // 
-            // colProfitPips
-            // 
-            this.colProfitPips.Text = "Pips";
-            this.colProfitPips.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.colProfitPips.Width = 88;
+            this.tmrDelay.Interval = 1500;
+            this.tmrDelay.Tick += new System.EventHandler(this.tmrDelay_Tick);
             // 
             // frmTradeHistory
             // 
@@ -185,6 +255,8 @@
             this.Text = "Trade History";
             this.Load += new System.EventHandler(this.frmTradeHistory_Load);
             this.tableLayoutPanel1.ResumeLayout(false);
+            this.panel1.ResumeLayout(false);
+            this.panel1.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -192,18 +264,24 @@
         #endregion
 
         private System.Windows.Forms.ListView lvwTrades;
-        private System.Windows.Forms.ColumnHeader colTimeOpen;
+        private System.Windows.Forms.ColumnHeader colOpenTime;
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanel1;
         private System.Windows.Forms.Panel panel1;
         private System.Windows.Forms.ColumnHeader colTicket;
         private System.Windows.Forms.ColumnHeader colType;
         private System.Windows.Forms.ColumnHeader colVolume;
-        private System.Windows.Forms.ColumnHeader colPriceOpen;
+        private System.Windows.Forms.ColumnHeader colEntryPrice;
         private System.Windows.Forms.ColumnHeader colSL;
         private System.Windows.Forms.ColumnHeader colTP;
-        private System.Windows.Forms.ColumnHeader colTimeClose;
-        private System.Windows.Forms.ColumnHeader colPriceClose;
-        private System.Windows.Forms.ColumnHeader colProfit;
+        private System.Windows.Forms.ColumnHeader colExitTime;
+        private System.Windows.Forms.ColumnHeader colExitPrice;
+        private System.Windows.Forms.ColumnHeader colNetProfit;
         private System.Windows.Forms.ColumnHeader colProfitPips;
+        private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.Button btnRefresh;
+        private System.Windows.Forms.DateTimePicker dtTo;
+        private System.Windows.Forms.Label label2;
+        private System.Windows.Forms.DateTimePicker dtFrom;
+        private System.Windows.Forms.Timer tmrDelay;
     }
 }

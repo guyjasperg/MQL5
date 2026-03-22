@@ -1,12 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace MQLBridge
@@ -17,10 +13,14 @@ namespace MQLBridge
         public event Action<int, object> OnUICommand;
         private IntPtr _parentHandle = IntPtr.Zero;
         private const int WM_EXITSIZEMOVE = 0x0232;
+        private frmTradeHistory _frmTradeHistory;
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
         public frmUI()
         {
             InitializeComponent();
+            Logger.Info("frmUI initialized");
         }
 
         // Call this method to set the parent handle after form creation
@@ -38,6 +38,11 @@ namespace MQLBridge
             {
                 ConstrainToParent();
             }
+        }
+
+        public void SendUICOmmand(int commandID, object payload)
+        {
+            OnUICommand?.Invoke(commandID, payload);
         }
 
         private void ConstrainToParent()
@@ -177,6 +182,9 @@ namespace MQLBridge
             Init_LotSize();
             cboTP.SelectedIndex = 0;
             cboSL.SelectedIndex = 0;
+
+            _frmTradeHistory = new frmTradeHistory();
+            
         }
 
         private void Init_LotSize()
@@ -282,7 +290,29 @@ namespace MQLBridge
         private void btnTradeHistory_Click(object sender, EventArgs e)
         {
             //Notify MQL we need to load trade history for the current date
-            OnUICommand?.Invoke((int)UIMessageIDs.TradeHistory, dtDate.Value.ToString("yyyy.MM.dd"));
+            //OnUICommand?.Invoke((int)UIMessageIDs.TradeHistory, dtDate.Value.ToString("yyyy.MM.dd"));
+
+            if(_frmTradeHistory == null || _frmTradeHistory.IsDisposed)
+            {
+                _frmTradeHistory = new frmTradeHistory();                
+            }   
+            _frmTradeHistory.parentForm = this;
+            _frmTradeHistory.Show();
+            SetParent(_frmTradeHistory.Handle, this._parentHandle);
+        }
+
+        public void Send_OnUICommand(int commandID, string payload)
+        {
+            OnUICommand?.Invoke(commandID, payload);
+        }
+
+        public void ShowTradeHistory(string tradeData)
+        {
+            Logger.Info("frmUI.ShowTradeHistory()");
+            if (_frmTradeHistory != null && !_frmTradeHistory.IsDisposed)
+            {
+                _frmTradeHistory.ShowTradeHistory(tradeData);
+            }
         }
 
         private void btnShowBuySell_Click(object sender, EventArgs e)
