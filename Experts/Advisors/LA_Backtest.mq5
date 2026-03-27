@@ -30,6 +30,7 @@ enum UIMessageIDs
    AccountBalance = 9,
    TradeHistory = 10,
    GoToTrade = 11,
+   BarOHCL = 12,
    FormClosed = 9999
 };
 
@@ -216,14 +217,12 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
             {
                if (bo_percent > 100)
                   bo_percent = 100; // Cap at 100%
-               bar_info = StringFormat("[%s] Body: %d BO %d%%",
-                                       FormatTime(bar.time), BarBodySize(bar),
-                                       bo_percent);
+               bar_info = StringFormat("[%s] BO %d%% ",
+                                       FormatTime(bar.time), bo_percent);
             }
             else
             {
-               bar_info = StringFormat("[%s] Body: %d",
-                                       FormatTime(bar.time), BarBodySize(bar));
+               bar_info = StringFormat("[%s] ", FormatTime(bar.time));
             }
             // MyUI.lblBarInfo.Text(bar_info);
             SendStringToDLL(bar_info, (int)BarData);
@@ -236,39 +235,27 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
             if (bar.close > bar.open)
             {
                int pips_r = (int)((bar.open - bar.low) / _Point);
-               bar_info2 = StringFormat("↑: %d pips | ↑↑: %d pips | ↓R: %d pips",
+               bar_info2 = StringFormat("[pips] ↑: %d | ↑↑: %d | ↓R: %d",
                                         pips_oc, pips_oh, pips_r);
                // Print(bar.open, " ", bar.close, " ", bar.high, " ", bar.low , " ", (int)((bar.open - bar.low) * 100));
             }
             else
             {
                int pips_r = (int)((bar.high - bar.open) / _Point);
-               bar_info2 = StringFormat("↓: %d pips | ↓↓: %d pips | ↑R: %d pips",
+               bar_info2 = StringFormat("[pips] ↓: %d | ↓↓: %d | ↑R: %d",
                                         pips_oc, pips_oh, pips_r);
             }
 
             // MyUI.lblBarInfo2.Text(bar_info2);
             SendStringToDLL(bar_info2, (int)BarData2);
 
-            // Get bar details
-            // double o = iOpen(_Symbol, _Period, bar_index);
-            // double c = iClose(_Symbol, _Period, bar_index);
-            double h = bar.high;
-            double l = bar.low;
-            // datetime t = iTime(_Symbol, _Period, bar_index);
-            // MQLBridge::MQLBridge::UpdateBarDetails(bar_index,o,c,h,l,(long)t);
-
-            // ChartRedraw(0);
-
-            // Get the High/Low of this bar to position the marker
-            // double h = iHigh(_Symbol, _Period, bar_index);
-            // double l = iLow(_Symbol, _Period, bar_index);
-
-            // UpdateHoverDetails(bar_index,o,c,h,l,(long)t);
+            //send OHCL to C# for potential use in UI or logic
+            string ohcl_info = StringFormat("%.2f,%.2f,%.2f,%.2f", bar.open, bar.high, bar.close, bar.low);
+            SendStringToDLL(ohcl_info, (int)BarOHCL);
 
             if (TrackMouse)
             {
-               DrawMouseMarker(bar_start_time, h, l);
+               DrawMouseMarker(bar_start_time, bar.high, bar.low);
             }
             else
             {
@@ -493,8 +480,8 @@ int GetBarsByDate(const string symbol,
 
    if (copied <= 0)
    {
-      PrintFormat("No bars found for %s on %s. Error: %d",
-                  symbol, TimeToString(start_of_day, TIME_DATE), GetLastError());
+      // PrintFormat("No bars found for %s on %s. Error: %d",
+      //             symbol, TimeToString(start_of_day, TIME_DATE), GetLastError());
       return 0;
    }
 
@@ -1280,6 +1267,18 @@ void DrawMouseMarker(datetime time, double high, double low)
    string text_name = "UI_Mouse_Text";
    string rect_name = "UI_Mouse_Box"; // Name for the container
 
+   // --- 1. Detect if the bar is near the right edge ---
+   int visible_bars = (int)ChartGetInteger(0, CHART_VISIBLE_BARS);
+   int first_bar    = (int)ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR);
+   int last_bar     = first_bar - visible_bars; // The index of the right-most bar
+
+   // Convert the 'time' of our marker back to an index
+   int current_bar_index = iBarShift(_Symbol, _Period, time);
+
+   // Define a threshold (e.g., if within 10 bars of the right edge)
+   bool isNearRightEdge = (current_bar_index <= last_bar + 5);
+   int sideMultiplier = isNearRightEdge ? -1 : 1;
+
    // 1. Calculate Offsets
    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
@@ -1304,66 +1303,28 @@ void DrawMouseMarker(datetime time, double high, double low)
    TimeToStruct(time, dt);
    string hourText = StringFormat("%02d:%02d", dt.hour, dt.min);
 
-   // We use the text position as our anchor for the box
-   datetime x_text = time + 3600;
-   double y_text = p_top;
+   // Determine bar offset based on period
+   int barSeconds = PeriodSeconds(_Period);
+   
+   // Apply the sideMultiplier here to x_text
+   // If normal: x_text is 1 bar to the right. If edge: 1 bar to the left.
+   datetime x_text = time + (barSeconds * sideMultiplier);
+   double y_text = high + (4.0 * _Point * 10); // Using points is safer than hardcoded 5.0
 
-   // 4. --- DRAW THE RECTANGLE (OBJ_RECTANGLE) ---
-   // We define the box boundaries relative to the text position
-   // Adjust these multipliers as you add more text
-   datetime x1 = x_text - 3600;       // Half bar left
-   datetime x2 = x_text + (3600 * 7); // Half bar right
-   double y1 = y_text + 2.0;          // Slightly above text
-   double y2 = y_text - 2.0;          // Slightly below text
-
-   // if(!ObjectCreate(0, rect_name, OBJ_RECTANGLE, 0, x1, y1, x2, y2))
-   // {
-   //    ObjectMove(0, rect_name, 0, x1, y1);
-   //    ObjectMove(0, rect_name, 1, x2, y2);
-   // }
-
-   // ObjectSetInteger(0, rect_name, OBJPROP_COLOR, clrLightBlue);      // Border color
-   // ObjectSetInteger(0, rect_name, OBJPROP_FILL, true);          // Fill the box
-   // ObjectSetInteger(0, rect_name, OBJPROP_BGCOLOR, clrBlack);   // Background color
-   // ObjectSetInteger(0, rect_name, OBJPROP_BACK, true);          // Ensure it's behind text
-   // ObjectSetInteger(0, rect_name, OBJPROP_SELECTABLE, false);
-
-   // 5. --- DRAW THE TEXT (OBJ_TEXT) ---
-   int barOffsetSeconds = PeriodSeconds(_Period) / 2; // Default to half a bar offset
-   switch (_Period)
-   {
-   case PERIOD_M5:
-      barOffsetSeconds = 300 / 4; // 5 minutes
-      break;
-   case PERIOD_M15:
-      barOffsetSeconds = 900 / 3; // 15 minutes
-      break;
-   case PERIOD_M30:
-      barOffsetSeconds = 1800 / 2; // 30 minutes
-      break;
-   case PERIOD_H1:
-      barOffsetSeconds = 3600; // 1 hour
-      break;
-   case PERIOD_H4:
-      barOffsetSeconds = 14400; // 4 hours
-      break;
-   case PERIOD_D1:
-      barOffsetSeconds = 86400; // 1 day
-      break;
-   default:
-      break;
-   }
-   if (!ObjectCreate(0, text_name, OBJ_TEXT, 0, x_text + barOffsetSeconds, y_text))
+   // 5. --- DRAW THE TEXT ---
+   if (!ObjectCreate(0, text_name, OBJ_TEXT, 0, x_text, y_text))
    {
       ObjectMove(0, text_name, 0, x_text, y_text);
    }
 
-   ObjectSetString(0, text_name, OBJPROP_TEXT, hourText);
-   ObjectSetString(0, text_name, OBJPROP_FONT, "Trebuchet MS");
-   ObjectSetInteger(0, text_name, OBJPROP_FONTSIZE, 8);
-   ObjectSetInteger(0, text_name, OBJPROP_COLOR, clrGreen);
-   ObjectSetInteger(0, text_name, OBJPROP_ANCHOR, ANCHOR_CENTER); // Changed to center for the box
-   ObjectSetInteger(0, text_name, OBJPROP_SELECTABLE, false);
+   ObjectSetString(0, text_name, OBJPROP_TEXT, StringFormat("%02d:%02d", dt.hour, dt.min));
+   ObjectSetInteger(0, text_name, OBJPROP_ALIGN, ALIGN_CENTER);
+   ObjectSetInteger(0, text_name, OBJPROP_READONLY, true);       // Make it act like a label
+   ObjectSetInteger(0, text_name, OBJPROP_COLOR, C'0,139,44');       // Text Color
+   
+   // Anchor Logic
+   ENUM_ANCHOR_POINT anchor = isNearRightEdge ? ANCHOR_RIGHT_LOWER : ANCHOR_LEFT_LOWER;
+   ObjectSetInteger(0, text_name, OBJPROP_ANCHOR, anchor);
 
    ChartRedraw(0);
 }
@@ -2050,47 +2011,10 @@ bool AutoTrade(ENUM_TRADE_DIRECTION direction,
 {
    // Get current price
    double price = 0;
-   double sl_price = 0;
-   double tp_price = 0;
-
-   // Calculate point value for pips
-   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-
-   Print("AutoTrade - Symbol: ", _Symbol, " | Point: ", point, " | Digits: ", digits);
-   // Adjust for 5-digit/3-digit brokers
-   double pip_value = point;
-   // if (digits == 5 || digits == 3)
-   //    pip_value = point * 10;
-
-   // Get prices based on direction
-   if (direction == TRADE_BUY)
-   {
-      price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-
-      // Calculate SL and TP for BUY
-      if (sl_pips > 0)
-         sl_price = price - (sl_pips * pip_value);
-
-      if (tp_pips > 0)
-         tp_price = price + (tp_pips * pip_value);
-   }
-   else // SELL
-   {
-      price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-
-      // Calculate SL and TP for SELL
-      if (sl_pips > 0)
-         sl_price = price + (sl_pips * pip_value);
-
-      if (tp_pips > 0)
-         tp_price = price - (tp_pips * pip_value);
-   }
 
    // Normalize prices
    price = NormalizeDouble(price, digits);
-   sl_price = NormalizeDouble(sl_price, digits);
-   tp_price = NormalizeDouble(tp_price, digits);
 
    // Validate lot size
    double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
@@ -2116,30 +2040,30 @@ bool AutoTrade(ENUM_TRADE_DIRECTION direction,
    bool result = false;
 
    Print("Attempting to execute trade: ", direction == TRADE_BUY ? "BUY" : "SELL",
-         " ", lots, " lots at ", price,
-         " | SL: ", sl_price,
-         " | TP: ", tp_price);
-   return true; // For testing, skip actual trade execution
+         " ", lots, " lots at ", price);
+   // return true; // For testing, skip actual trade execution
 
    if (direction == TRADE_BUY)
    {
-      result = trade.Buy(lots, _Symbol, price, sl_price, tp_price, comment);
+      result = trade.Buy(lots, _Symbol, price);
    }
    else
    {
-      result = trade.Sell(lots, _Symbol, price, sl_price, tp_price, comment);
+      result = trade.Sell(lots, _Symbol, price);
    }
 
    // Check result
    if (result)
    {
-      PrintFormat("Trade executed successfully: %s %.2f lots at %.5f, SL: %.5f, TP: %.5f",
-                  direction == TRADE_BUY ? "BUY" : "SELL",
-                  lots, price, sl_price, tp_price);
-
       // Get ticket number
       ulong ticket = trade.ResultOrder();
       Print("Order ticket: ", ticket);
+
+      PrintFormat("Trade executed successfully: %s %.2f lots",
+                  direction == TRADE_BUY ? "BUY" : "SELL", lots);
+
+      //Modify the order to ensure SL and TP are set (some brokers require this as a separate step)
+      ModifyPosition(ticket, tp_pips, sl_pips);
    }
    else
    {
@@ -2465,22 +2389,31 @@ bool ModifyPosition(ulong ticket, int tp_pips, int sl_pips)
    if (type == POSITION_TYPE_BUY)
    {
       if (sl_pips > 0)
-         sl_price = open_price - (sl_pips * pip_value);
+         sl_price = open_price - (sl_pips /100);
       if (tp_pips > 0)
-         tp_price = open_price + (tp_pips * pip_value);
+         tp_price = open_price + (tp_pips /100);
    }
    else // SELL
    {
       if (sl_pips > 0)
-         sl_price = open_price + (sl_pips * pip_value);
+         sl_price = open_price + (sl_pips /100);
       if (tp_pips > 0)
-         tp_price = open_price - (tp_pips * pip_value);
+         tp_price = open_price - (tp_pips /100);
    }
 
    sl_price = NormalizeDouble(sl_price, digits);
    tp_price = NormalizeDouble(tp_price, digits);
 
-   return trade.PositionModify(ticket, sl_price, tp_price);
+   bool result =  trade.PositionModify(ticket, sl_price, tp_price);
+   if(!result)
+   {
+      Print("Failed to modify position: ", ticket, " Error: ", GetLastError());
+   }
+   else
+   {
+      Print("Position modified successfully: ", ticket, " Open Price: ", open_price, " New SL: ", sl_price, " New TP: ", tp_price);
+   }
+   return result;
 }
 
 //+------------------------------------------------------------------+
@@ -2726,6 +2659,8 @@ bool ExtractPositionData(ulong position_id, PositionDetails &details)
          details.profit += HistoryDealGetDouble(ticket, DEAL_PROFIT);
          details.commission += HistoryDealGetDouble(ticket, DEAL_COMMISSION);
          details.swap += HistoryDealGetDouble(ticket, DEAL_SWAP);
+         details.sl_price = HistoryDealGetDouble(ticket, DEAL_SL);
+         details.tp_price = HistoryDealGetDouble(ticket, DEAL_TP);
          has_exit = true;
          Print("  >> Exit price: ", details.exit_price);
       }

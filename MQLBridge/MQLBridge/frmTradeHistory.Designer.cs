@@ -55,6 +55,10 @@
             this.colProfitPips = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
             this.panel1 = new System.Windows.Forms.Panel();
+            this.label5 = new System.Windows.Forms.Label();
+            this.lblProfitPips = new System.Windows.Forms.Label();
+            this.lblProfit = new System.Windows.Forms.Label();
+            this.label3 = new System.Windows.Forms.Label();
             this.btnRefresh = new System.Windows.Forms.Button();
             this.dtTo = new System.Windows.Forms.DateTimePicker();
             this.label2 = new System.Windows.Forms.Label();
@@ -177,6 +181,10 @@
             // 
             // panel1
             // 
+            this.panel1.Controls.Add(this.label5);
+            this.panel1.Controls.Add(this.lblProfitPips);
+            this.panel1.Controls.Add(this.lblProfit);
+            this.panel1.Controls.Add(this.label3);
             this.panel1.Controls.Add(this.btnRefresh);
             this.panel1.Controls.Add(this.dtTo);
             this.panel1.Controls.Add(this.label2);
@@ -187,6 +195,45 @@
             this.panel1.Name = "panel1";
             this.panel1.Size = new System.Drawing.Size(947, 86);
             this.panel1.TabIndex = 1;
+            // 
+            // label5
+            // 
+            this.label5.AutoSize = true;
+            this.label5.Location = new System.Drawing.Point(900, 55);
+            this.label5.Name = "label5";
+            this.label5.Size = new System.Drawing.Size(46, 20);
+            this.label5.TabIndex = 8;
+            this.label5.Text = "[pips]";
+            // 
+            // lblProfitPips
+            // 
+            this.lblProfitPips.Font = new System.Drawing.Font("Consolas", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.lblProfitPips.Location = new System.Drawing.Point(793, 55);
+            this.lblProfitPips.Name = "lblProfitPips";
+            this.lblProfitPips.Size = new System.Drawing.Size(109, 20);
+            this.lblProfitPips.TabIndex = 7;
+            this.lblProfitPips.Text = "0";
+            this.lblProfitPips.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // lblProfit
+            // 
+            this.lblProfit.Font = new System.Drawing.Font("Consolas", 10F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.lblProfit.Location = new System.Drawing.Point(793, 34);
+            this.lblProfit.Name = "lblProfit";
+            this.lblProfit.Size = new System.Drawing.Size(109, 20);
+            this.lblProfit.TabIndex = 6;
+            this.lblProfit.Text = "0.00";
+            this.lblProfit.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // label3
+            // 
+            this.label3.AutoSize = true;
+            this.label3.Font = new System.Drawing.Font("Consolas", 9F, System.Drawing.FontStyle.Underline, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label3.Location = new System.Drawing.Point(774, 7);
+            this.label3.Name = "label3";
+            this.label3.Size = new System.Drawing.Size(130, 22);
+            this.label3.TabIndex = 5;
+            this.label3.Text = "Total Profit";
             // 
             // btnRefresh
             // 
@@ -252,7 +299,9 @@
             this.Controls.Add(this.tableLayoutPanel1);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
             this.Name = "frmTradeHistory";
+            this.ShowInTaskbar = false;
             this.Text = "Trade History";
+            this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.frmTradeHistory_FormClosed);
             this.Load += new System.EventHandler(this.frmTradeHistory_Load);
             this.tableLayoutPanel1.ResumeLayout(false);
             this.panel1.ResumeLayout(false);
@@ -283,5 +332,9 @@
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.DateTimePicker dtFrom;
         private System.Windows.Forms.Timer tmrDelay;
+        private System.Windows.Forms.Label lblProfit;
+        private System.Windows.Forms.Label label3;
+        private System.Windows.Forms.Label label5;
+        private System.Windows.Forms.Label lblProfitPips;
     }
 }

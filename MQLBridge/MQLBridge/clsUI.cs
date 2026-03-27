@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using System.Text.RegularExpressions;
 
 namespace MQLBridge
 {
@@ -56,7 +57,14 @@ namespace MQLBridge
             Logger.Initialize(LogLevel.Debug, 1024 * 1024 * 10);
             Logger.Info("Starting UI...");
 
-            if (_uiThread != null && _uiThread.IsAlive) return;
+            if (_uiThread != null && _uiThread.IsAlive)
+            {
+                //form is already running, just bring it to front
+                _form.BeginInvoke(new Action(() => {
+                    _form.GetSettings();
+                }));
+                return;
+            }
 
             IntPtr parentHandle = new IntPtr(chartHandle);
             _formClosed = false; // Reset flag
@@ -256,15 +264,49 @@ namespace MQLBridge
                     {
                         // Process BarData message if needed
                         _form.BeginInvoke(new Action(() => {
-                            _form.lblCurrentBar.Text = msg;
+                            //_form.lblCurrentBar.Text = msg;
+
+                            // The pattern for YYYY.MM.DD
+                            string pattern = @"\d{4}\.\d{2}\.\d{2}";
+
+                            Match match = Regex.Match(msg, pattern);
+                            if (match.Success)
+                            {
+                                _form.lblCurrentBar.Text = match.Groups[0].Value;
+                            }
+
+                            //get time part of msg
+                            // Pattern: looks for 2 digits, a colon, and 2 digits followed by a closing bracket
+                            match = Regex.Match(msg, @"(\d{2}:\d{2})(?=\])");
+                            if (match.Success)
+                            {
+                                _form.lblBarTime.Text = match.Groups[1].Value;
+                            }
+
+                            //BO part
+                            pattern = @"BO\s\d+%";
+                            match = Regex.Match(msg, pattern);
+                            _form.lblBO.Visible = match.Success;
+                            _form.lblBO.Text = match.Success ? match.Value : "";
                         }));
                     }
                     else if (msgID == (int)UIMessageIDs.BarData2)
                     {
                         // Process BarData message if needed
                         _form.BeginInvoke(new Action(() => {
-                            _form.lblData2.Text = msg;
+                            
+                            _form.lblData2.Text = msg.Remove(0,7);
                         }));
+                    }
+                    else if (msgID == (int)UIMessageIDs.BarOHCL)
+                    {
+                        string []tokens = msg.Split(',');
+                        if (tokens != null && tokens.Length == 4)
+                        {
+                            _form.BeginInvoke(new Action(() => {
+                                _form.UpdateCandleInfo(double.Parse(tokens[0]), double.Parse(tokens[1]), double.Parse(tokens[2]), double.Parse(tokens[3]));
+                            }));
+                        }
                     }
                     else if (msgID == (int)UIMessageIDs.CountdownUpdate)
                     {
@@ -342,3 +384,4 @@ namespace MQLBridge
         }
     }
 }
+;

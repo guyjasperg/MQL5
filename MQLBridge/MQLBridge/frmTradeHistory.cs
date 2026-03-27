@@ -64,6 +64,9 @@ namespace MQLBridge
             Logger.Info($"Refresh requested for date range: {sRange}");
 
             parentForm?.Send_OnUICommand((int)UIMessageIDs.TradeHistory, sRange);
+
+            //reset totals display
+            ShowTotals(true);
         }
 
         public void SetParentForm(frmUI parent)
@@ -83,6 +86,7 @@ namespace MQLBridge
             {
                 Logger.Info("Iterating through trades to add to ListView");
                 int rowIndex = 0;  // Track row for alternating colors
+
                 foreach (var trade in tradeHistory.Trades)
                 {
                     Logger.Debug("+Processing trade");
@@ -100,7 +104,7 @@ namespace MQLBridge
 
                     // Add subitems in column order
                     item.SubItems.Add(trade.EntryTime.ToString("yyyy-MM-dd HH:mm:ss"));     // [1]
-                    item.SubItems.Add(trade.Type);                                          // [2]
+                    item.SubItems.Add(trade.Type.ToUpper());                                          // [2]
                     item.SubItems.Add(trade.Volume.ToString("F2"));                         // [3]
                     item.SubItems.Add(trade.EntryPrice.ToString("F2"));                     // [4]
                     item.SubItems.Add(trade.SL_pips.ToString());                            // [5]
@@ -128,6 +132,7 @@ namespace MQLBridge
                     item.SubItems[2].ForeColor = trade.Type == "buy" ? Color.Green : Color.Red;  // Index 2 = Type
 
                     lvwTrades.Items.Add(item);
+
                     rowIndex++;
                 }
                 Logger.Info($"Displayed {tradeHistory.Trades.Count} trades in ListView");
@@ -140,9 +145,39 @@ namespace MQLBridge
             finally
             {
                 lvwTrades.EndUpdate();
+                ShowTotals(false);
             }
         }
 
+        private void ShowTotals(bool bReset = true)
+        {
+            if(bReset)
+            {
+                lblProfit.Text = "0.00";
+                lblProfitPips.Text = "0";
+                lblProfit.ForeColor = Color.Black;
+                lblProfitPips.ForeColor = Color.Black;
+                return;
+            }
+            double totalNetProfit = tradeHistory.Trades.Sum(t => t.NetProfit);
+            int totalProfitPips = tradeHistory.Trades.Sum(t => t.Profit_pips);
+            lblProfit.Text = $"{totalNetProfit:F2}";
+            lblProfitPips.Text = $"{totalProfitPips}";
+
+            if(totalNetProfit > 0)
+                lblProfit.ForeColor = Color.Green;
+            else if(totalNetProfit < 0)
+                lblProfit.ForeColor = Color.Red;
+            else
+                lblProfit.ForeColor = Color.Black;
+
+            //if(totalProfitPips > 0)
+            //    lblProfitPips.ForeColor = Color.Green;
+            //else if(totalProfitPips < 0)
+            //    lblProfitPips.ForeColor = Color.Red;
+            //else
+            //    lblProfitPips.ForeColor = Color.Black;
+        }
         private void lvwTrades_SelectedIndexChanged(object sender, EventArgs e)
         {
 
@@ -162,6 +197,11 @@ namespace MQLBridge
                     parentForm?.SendUICOmmand((int)UIMessageIDs.GoToTrade, sParam);
                 }
             }
+        }
+
+        private void frmTradeHistory_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            parentForm.Activate();
         }
     }
 

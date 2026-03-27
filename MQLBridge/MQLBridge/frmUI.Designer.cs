@@ -59,8 +59,12 @@
             this.btnDayCurrent = new System.Windows.Forms.Button();
             this.btnDayNext = new System.Windows.Forms.Button();
             this.btnDayPrevious = new System.Windows.Forms.Button();
+            this.lblBarTime = new System.Windows.Forms.Label();
+            this.picBar = new System.Windows.Forms.PictureBox();
+            this.lblBO = new System.Windows.Forms.Label();
             this.groupBox1.SuspendLayout();
             this.pnlBuySell.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.picBar)).BeginInit();
             this.SuspendLayout();
             // 
             // btnSetDate
@@ -117,23 +121,28 @@
             // lblCurrentBar
             // 
             this.lblCurrentBar.AutoSize = true;
+            this.lblCurrentBar.Font = new System.Drawing.Font("Consolas", 8F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.lblCurrentBar.Location = new System.Drawing.Point(17, 26);
             this.lblCurrentBar.Name = "lblCurrentBar";
-            this.lblCurrentBar.Size = new System.Drawing.Size(22, 22);
+            this.lblCurrentBar.Size = new System.Drawing.Size(27, 19);
             this.lblCurrentBar.TabIndex = 8;
             this.lblCurrentBar.Text = "[]";
             // 
             // lblData2
             // 
             this.lblData2.AutoSize = true;
+            this.lblData2.Font = new System.Drawing.Font("Consolas", 8F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.lblData2.Location = new System.Drawing.Point(17, 51);
             this.lblData2.Name = "lblData2";
-            this.lblData2.Size = new System.Drawing.Size(22, 22);
+            this.lblData2.Size = new System.Drawing.Size(27, 19);
             this.lblData2.TabIndex = 9;
             this.lblData2.Text = "[]";
             // 
             // groupBox1
             // 
+            this.groupBox1.Controls.Add(this.lblBO);
+            this.groupBox1.Controls.Add(this.picBar);
+            this.groupBox1.Controls.Add(this.lblBarTime);
             this.groupBox1.Controls.Add(this.lblCurrentBar);
             this.groupBox1.Controls.Add(this.lblData2);
             this.groupBox1.Location = new System.Drawing.Point(26, 97);
@@ -275,13 +284,6 @@
             // 
             this.cboTP.Font = new System.Drawing.Font("Trebuchet MS", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.cboTP.FormattingEnabled = true;
-            this.cboTP.Items.AddRange(new object[] {
-            "400",
-            "500",
-            "800",
-            "1000",
-            "1500",
-            "2000"});
             this.cboTP.Location = new System.Drawing.Point(134, 83);
             this.cboTP.Name = "cboTP";
             this.cboTP.Size = new System.Drawing.Size(128, 31);
@@ -291,12 +293,6 @@
             // 
             this.cboSL.Font = new System.Drawing.Font("Trebuchet MS", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.cboSL.FormattingEnabled = true;
-            this.cboSL.Items.AddRange(new object[] {
-            "2000",
-            "2500",
-            "3000",
-            "3500",
-            "4000"});
             this.cboSL.Location = new System.Drawing.Point(134, 119);
             this.cboSL.Name = "cboSL";
             this.cboSL.Size = new System.Drawing.Size(128, 31);
@@ -410,6 +406,38 @@
             this.btnDayPrevious.UseVisualStyleBackColor = true;
             this.btnDayPrevious.Click += new System.EventHandler(this.btnDayPrevious_Click);
             // 
+            // lblBarTime
+            // 
+            this.lblBarTime.Font = new System.Drawing.Font("Consolas", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.lblBarTime.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(0)))), ((int)(((byte)(64)))), ((int)(((byte)(0)))));
+            this.lblBarTime.Location = new System.Drawing.Point(315, 1);
+            this.lblBarTime.Name = "lblBarTime";
+            this.lblBarTime.Size = new System.Drawing.Size(66, 22);
+            this.lblBarTime.TabIndex = 28;
+            this.lblBarTime.Text = "00:00";
+            this.lblBarTime.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // picBar
+            // 
+            this.picBar.Location = new System.Drawing.Point(339, 25);
+            this.picBar.Name = "picBar";
+            this.picBar.Size = new System.Drawing.Size(36, 55);
+            this.picBar.TabIndex = 28;
+            this.picBar.TabStop = false;
+            this.picBar.Click += new System.EventHandler(this.picBar_Click);
+            this.picBar.Paint += new System.Windows.Forms.PaintEventHandler(this.picBar_Paint);
+            // 
+            // lblBO
+            // 
+            this.lblBO.Font = new System.Drawing.Font("Consolas", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.lblBO.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(0)))), ((int)(((byte)(64)))), ((int)(((byte)(0)))));
+            this.lblBO.Location = new System.Drawing.Point(234, -2);
+            this.lblBO.Name = "lblBO";
+            this.lblBO.Size = new System.Drawing.Size(80, 28);
+            this.lblBO.TabIndex = 29;
+            this.lblBO.Text = "BO 100%";
+            this.lblBO.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
             // frmUI
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 22F);
@@ -436,14 +464,18 @@
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
             this.MaximizeBox = false;
             this.Name = "frmUI";
+            this.ShowInTaskbar = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "LA Backtest";
             this.TopMost = true;
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.frmUI_FormClosing);
+            this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.frmUI_FormClosed);
             this.Load += new System.EventHandler(this.frmUI_Load);
             this.groupBox1.ResumeLayout(false);
             this.groupBox1.PerformLayout();
             this.pnlBuySell.ResumeLayout(false);
             this.pnlBuySell.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.picBar)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -481,5 +513,8 @@
         public System.Windows.Forms.Panel pnlBuySell;
         public System.Windows.Forms.Label lblAccountBalance;
         private System.Windows.Forms.Button btnMarketHours;
+        public System.Windows.Forms.Label lblBarTime;
+        private System.Windows.Forms.PictureBox picBar;
+        public System.Windows.Forms.Label lblBO;
     }
 }

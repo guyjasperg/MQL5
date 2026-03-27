@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forex Hours</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e1a;
+            color: #e0e0e0;
+            padding: 12px;
+            min-width: 400px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #1a2332;
+        }
+        
+        .clock {
+            font-family: 'Consolas', monospace;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .utc { color: #60a5fa; }
+        .local { color: #9ca3af; font-size: 12px; }
+        
+        .timeline-container {
+            background: #111827;
+            border-radius: 6px;
+            padding: 12px;
+            border: 1px solid #1f2937;
+            position: relative;
+        }
+        
+        .timeline-row {
+            position: relative;
+            height: 32px;
+            margin-bottom: 6px;
+        }
+        
+        .timeline-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .timeline-label {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 50px;
+            font-size: 10px;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .timeline-track {
+            position: absolute;
+            left: 55px;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            background: #1f2937;
+            border-radius: 4px;
+        }
+        
+        .session-block {
+            position: absolute;
+            top: 4px;
+            bottom: 4px;
+            border-radius: 3px;
+            opacity: 0.3;
+            transition: all 0.3s ease;
+        }
+        
+        .session-block.active {
+            opacity: 1;
+            box-shadow: 0 0 12px currentColor;
+        }
+        
+        .sydney { background: #3b82f6; color: #3b82f6; }
+        .tokyo { background: #ef4444; color: #ef4444; }
+        .london { background: #f59e0b; color: #f59e0b; }
+        .newyork { background: #10b981; color: #10b981; }
+        
+        .time-cursor {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #fff;
+            z-index: 100;
+            box-shadow: 0 0 8px #fff;
+            pointer-events: none;
+        }
+        
+        .time-cursor::before {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: -3px;
+            width: 8px;
+            height: 8px;
+            background: #fff;
+            border-radius: 50%;
+        }
+        
+        .hour-markers {
+            position: absolute;
+            left: 55px;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+        
+        .hour-marker {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: #374151;
+        }
+        
+        .hour-label {
+            position: absolute;
+            bottom: -16px;
+            font-size: 9px;
+            color: #6b7280;
+            transform: translateX(-50%);
+        }
+        
+        .status-bar {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            padding-top: 8px;
+            border-top: 1px solid #1f2937;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: #6b7280;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #374151;
+            transition: all 0.3s ease;
+        }
+        
+        .status-dot.active {
+            box-shadow: 0 0 8px currentColor;
+        }
+        
+        .status-dot.sydney.active { background: #3b82f6; }
+        .status-dot.tokyo.active { background: #ef4444; }
+        .status-dot.london.active { background: #f59e0b; }
+        .status-dot.newyork.active { background: #10b981; }
+        
+        .status-text.active {
+            color: #e5e7eb;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <div class="clock utc" id="utc-clock">00:00:00</div>
+            <div class="local" id="local-clock">Local: 00:00:00</div>
+        </div>
+    </div>
+    
+    <div class="timeline-container">
+        <div class="hour-markers" id="hour-markers"></div>
+        
+        <div class="timeline-row">
+            <div class="timeline-label">Sydney</div>
+            <div class="timeline-track">
+                <div class="session-block sydney" id="block-sydney"></div>
+            </div>
+        </div>
+        
+        <div class="timeline-row">
+            <div class="timeline-label">Tokyo</div>
+            <div class="timeline-track">
+                <div class="session-block tokyo" id="block-tokyo"></div>
+            </div>
+        </div>
+        
+        <div class="timeline-row">
+            <div class="timeline-label">London</div>
+            <div class="timeline-track">
+                <div class="session-block london" id="block-london"></div>
+            </div>
+        </div>
+        
+        <div class="timeline-row">
+            <div class="timeline-label">NYC</div>
+            <div class="timeline-track">
+                <div class="session-block newyork" id="block-ny"></div>
+                <div class="time-cursor" id="time-cursor"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-item">
+            <div class="status-dot sydney" id="dot-sydney"></div>
+            <span class="status-text" id="text-sydney">Sydney</span>
+        </div>
+        <div class="status-item">
+            <div class="status-dot tokyo" id="dot-tokyo"></div>
+            <span class="status-text" id="text-tokyo">Tokyo</span>
+        </div>
+        <div class="status-item">
+            <div class="status-dot london" id="dot-london"></div>
+            <span class="status-text" id="text-london">London</span>
+        </div>
+        <div class="status-item">
+            <div class="status-dot newyork" id="dot-ny"></div>
+            <span class="status-text" id="text-ny">NYC</span>
+        </div>
+    </div>
+
+    <script>
+        const SESSIONS = {
+            sydney: { open: 22, close: 7 },
+            tokyo: { open: 0, close: 9 },
+            london: { open: 8, close: 17 },
+            ny: { open: 13, close: 22 }
+        };
+
+        function isSessionOpen(session, hour) {
+            if (session.open > session.close) {
+                return hour >= session.open || hour < session.close;
+            }
+            return hour >= session.open && hour < session.close;
+        }
+
+        function getSessionPosition(session) {
+            const dayHours = 24;
+            let left, width;
+            
+            if (session.open > session.close) {
+                // Overnight session (e.g., 22:00 - 07:00)
+                const startPct = (session.open / dayHours) * 100;
+                const endPct = (session.close / dayHours) * 100;
+                left = startPct;
+                width = (100 - startPct) + endPct;
+            } else {
+                // Same day session
+                left = (session.open / dayHours) * 100;
+                width = ((session.close - session.open) / dayHours) * 100;
+            }
+            
+            return { left: left + '%', width: width + '%' };
+        }
+
+        function createHourMarkers() {
+            const container = document.getElementById('hour-markers');
+            for (let i = 0; i <= 24; i += 2) {
+                const marker = document.createElement('div');
+                marker.className = 'hour-marker';
+                marker.style.left = (i / 24 * 100) + '%';
+                
+                const label = document.createElement('div');
+                label.className = 'hour-label';
+                label.textContent = String(i).padStart(2, '0');
+                label.style.left = (i / 24 * 100) + '%';
+                
+                container.appendChild(marker);
+                container.appendChild(label);
+            }
+        }
+
+        function update() {
+            const now = new Date();
+            const utcHour = now.getUTCHours() + now.getUTCMinutes() / 60;
+            
+            // Update clocks
+            document.getElementById('utc-clock').textContent = 
+                now.toISOString().split('T')[1].split('.')[0];
+            document.getElementById('local-clock').textContent = 
+                'Local: ' + now.toLocaleTimeString();
+            
+            // Update cursor position
+            const cursorPct = (utcHour / 24) * 100;
+            document.getElementById('time-cursor').style.left = cursorPct + '%';
+            
+            // Update sessions
+            for (const [key, session] of Object.entries(SESSIONS)) {
+                const block = document.getElementById('block-' + key);
+                const dot = document.getElementById('dot-' + key);
+                const text = document.getElementById('text-' + key);
+                const pos = getSessionPosition(session);
+                
+                block.style.left = pos.left;
+                block.style.width = pos.width;
+                
+                const open = isSessionOpen(session, utcHour);
+                block.classList.toggle('active', open);
+                dot.classList.toggle('active', open);
+                text.classList.toggle('active', open);
+            }
+        }
+
+        createHourMarkers();
+        update();
+        setInterval(update, 1000);
+    </script>
+</body>
+</html>

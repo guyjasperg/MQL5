@@ -13,6 +13,7 @@
         AccountBalance = 9,
         TradeHistory = 10,
         GoToTrade = 11,
+        BarOHCL = 12,
         FormClosed = 9999
     }
 

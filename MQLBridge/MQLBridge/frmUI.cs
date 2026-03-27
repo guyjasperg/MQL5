@@ -2,11 +2,21 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.Drawing.Text;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Windows.Forms;
 
 namespace MQLBridge
 {
+    public struct CandleInfo
+    {
+        public double Open;
+        public double High;
+        public double Low;
+        public double Close;
+        public string TimeLabel; // The "08:00" string from your parser
+    }
     public partial class frmUI : Form
     {
         // The second parameter is now a generic object
@@ -14,9 +24,14 @@ namespace MQLBridge
         private IntPtr _parentHandle = IntPtr.Zero;
         private const int WM_EXITSIZEMOVE = 0x0232;
         private frmTradeHistory _frmTradeHistory;
+        private CandleInfo _candleInfo;
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool SetForegroundWindow(IntPtr hWnd);
         public frmUI()
         {
             InitializeComponent();
@@ -38,6 +53,18 @@ namespace MQLBridge
             {
                 ConstrainToParent();
             }
+        }
+
+        public void UpdateCandleInfo(double open, double high, double close, double low,  string timeLabel="")
+        {
+            _candleInfo.Open = open;
+            _candleInfo.High = high;
+            _candleInfo.Low = low;
+            _candleInfo.Close = close;
+            _candleInfo.TimeLabel = timeLabel;
+
+            //repaint the candle info on the UI
+            picBar.Invalidate();
         }
 
         public void SendUICOmmand(int commandID, object payload)
@@ -163,6 +190,11 @@ namespace MQLBridge
             dtDate.Value = DateTime.Now;
         }
 
+        public void frmReloaded()
+        {
+            Logger.Info("frmUI reloaded");
+            btnDayCurrent.PerformClick();
+        }
         private void frmUI_Load(object sender, EventArgs e)
         {
             // Enable form to receive key events before child controls
@@ -175,6 +207,7 @@ namespace MQLBridge
                 cboDays.Items.Add(i.ToString());
             }
             //default value
+            lblBO.Text = "";
             cboDays.SelectedIndex = 6;
             dtDate.Value = DateTime.Now;
             pnlBuySell.Visible = false;
@@ -182,9 +215,10 @@ namespace MQLBridge
             Init_LotSize();
             cboTP.SelectedIndex = 0;
             cboSL.SelectedIndex = 0;
+            _candleInfo = new CandleInfo();
 
             _frmTradeHistory = new frmTradeHistory();
-            
+            Logger.Info("frmUI loaded");
         }
 
         private void Init_LotSize()
@@ -197,9 +231,26 @@ namespace MQLBridge
                 cboLotSize.Items.Add(lotSize.ToString("0.00"));
             }
             cboLotSize.SelectedIndex = 0;
+
+            cboTP.Items.Add("400");
+            cboTP.Items.Add("500");
+            cboTP.Items.Add("800");
+            cboTP.Items.Add("900");
+            cboTP.Items.Add("1000");
+            cboTP.Items.Add("1500");
+            cboTP.Items.Add("2000");
+            cboTP.SelectedIndex = 0;
+
+            cboSL.Items.Add("2000");
+            cboSL.Items.Add("2500");
+            cboSL.Items.Add("3000");
+            cboSL.Items.Add("3250");
+            cboSL.Items.Add("3500");
+            cboSL.Items.Add("4000");
+            cboSL.SelectedIndex = 0;
         }
 
-        private void GetSettings()
+        public void GetSettings()
         {
             string _currentSettings = "";
 
@@ -379,6 +430,76 @@ namespace MQLBridge
         {
             frmTradingHours frm = new frmTradingHours();
             frm.Show();
+        }
+
+        private void frmUI_FormClosed(object sender, FormClosedEventArgs e)
+        {
+
+        }
+
+        private void frmUI_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (this._parentHandle != IntPtr.Zero)
+            {
+                // Force Windows to bring the MT5 Chart back to the front
+                SetForegroundWindow(this._parentHandle);
+            }
+        }
+
+        private void picBar_Paint(object sender, PaintEventArgs e)
+        {
+            if (_candleInfo.High == 0) return; // Don't draw if no data
+
+            Graphics g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+
+            // 1. Setup Dimensions
+            float h = picBar.Height;
+            float w = picBar.Width;
+            float centerX = w / 2;
+            float bodyWidth = w * 0.4f;
+
+            // 2. Scaling Math (Map Price to Pixels)
+            double range = _candleInfo.High - _candleInfo.Low;
+            if (range <= 0) range = 0.00001; // Avoid division by zero
+
+            // Convert price to Y-coordinate: (High - Price) / Range * Height
+            float yHigh = 0;
+            float yLow = h;
+            float yOpen = (float)((_candleInfo.High - _candleInfo.Open) / range * h);
+            float yClose = (float)((_candleInfo.High - _candleInfo.Close) / range * h);
+
+            // 3. Determine Bullish vs Bearish
+            bool isBullish = _candleInfo.Close >= _candleInfo.Open;
+            Color candleColor = isBullish ? Color.Green : Color.Red;
+            Brush bodyBrush = new SolidBrush(candleColor);
+            Pen wickPen = new Pen(candleColor, 1);
+
+            // 4. Draw the Wick (High to Low)
+            g.DrawLine(wickPen, centerX, yHigh, centerX, yLow);
+
+            // 5. Draw the Body
+            float bodyTop = Math.Min(yOpen, yClose);
+            float bodyHeight = Math.Max(1, Math.Abs(yOpen - yClose)); // Minimum 1px height
+            g.FillRectangle(bodyBrush, centerX - (bodyWidth / 2), bodyTop, bodyWidth, bodyHeight);
+
+            // 6. Draw the Time Label (The "08:00" part)
+            if (_candleInfo.TimeLabel != null)
+            {
+                using (Font font = new Font("Segoe UI", 10, FontStyle.Bold))
+                {
+                    SizeF textSize = g.MeasureString(_candleInfo.TimeLabel, font);
+                    // Position it at the bottom center of the box
+                    g.DrawString(_candleInfo.TimeLabel, font, Brushes.White,
+                                 centerX - (textSize.Width / 2), h - textSize.Height - 5);
+                }
+            }
+        }
+
+        private void picBar_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }
