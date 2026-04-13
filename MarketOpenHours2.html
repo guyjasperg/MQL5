@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forex Market Sessions</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0a0e17 0%, #1a1f35 100%);
+            color: #e0e6f0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 25px 0;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #00d4aa, #007cf0, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: #6b7a90;
+            font-size: 0.9rem;
+        }
+
+        /* Current Time Bar */
+        .time-bar {
+            background: rgba(17, 24, 39, 0.8);
+            border: 1px solid #2d3a4c;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 25px;
+            backdrop-filter: blur(10px);
+        }
+
+        .time-bar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .local-time {
+            text-align: center;
+        }
+
+        .local-time .label {
+            font-size: 0.75rem;
+            color: #6b7a90;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .local-time .time {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #fff;
+            margin: 2px 0;
+        }
+
+        .local-time .date {
+            font-size: 0.85rem;
+            color: #4a5568;
+        }
+
+        .timezone-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .timezone-selector label {
+            font-size: 0.85rem;
+            color: #8896a8;
+        }
+
+        .timezone-selector select {
+            background: #1e293b;
+            color: #e0e6f0;
+            border: 1px solid #334155;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .timezone-selector select:focus {
+            border-color: #00d4aa;
+        }
+
+        /* Market Overview Cards */
+        .sessions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .session-card {
+            background: rgba(17, 24, 39, 0.8);
+            border: 1px solid #2d3a4c;
+            border-radius: 14px;
+            padding: 18px;
+            text-align: center;
+            transition: transform 0.2s, border-color 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .session-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .session-card.active {
+            border-color: #00d4aa;
+            box-shadow: 0 0 20px rgba(0, 212, 170, 0.15);
+        }
+
+        .session-card.active::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #00d4aa, #007cf0);
+        }
+
+        .session-name {
+            font-weight: 700;
+            font-size: 1.05rem;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .session-flag {
+            font-size: 1.1rem;
+        }
+
+        .session-region {
+            font-size: 0.75rem;
+            color: #6b7a90;
+            margin-bottom: 10px;
+        }
+
+        .session-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+        }
+
+        .session-status.open {
+            background: rgba(0, 212, 170, 0.15);
+            color: #00d4aa;
+        }
+
+        .session-status.closed {
+            background: rgba(100, 116, 139, 0.15);
+            color: #64748b;
+        }
+
+        .pulse {
+            width: 8px; height: 8px;
+            background: currentColor;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        .session-hours {
+            font-size: 0.8rem;
+            color: #8896a8;
+        }
+
+        .session-hours strong {
+            color: #c9d1dc;
+        }
+
+        .session-volatility {
+            margin-top: 8px;
+            font-size: 0.7rem;
+            color: #4a5568;
+        }
+
+        .volatility-bar {
+            height: 4px;
+            background: #1e293b;
+            border-radius: 2px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+
+        .volatility-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+
+        /* 24-Hour Timeline */
+        .timeline-section {
+            background: rgba(17, 24, 39, 0.8);
+            border: 1px solid #2d3a4c;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .timeline-section h2 {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: #8896a8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .timeline-wrapper {
+            position: relative;
+            padding: 10px 0 30px;
+        }
+
+        .timeline-track {
+            height: 60px;
+            background: #1e293b;
+            border-radius: 10px;
+            position: relative;
+            margin: 15px 0;
+            overflow: visible;
+        }
+
+        .session-bar {
+            position: absolute;
+            height: 36px;
+            top: 12px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: rgba(255,255,255,0.9);
+            transition: opacity 0.3s;
+            cursor: pointer;
+            white-space: nowrap;
+            padding: 0 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .session-bar:hover {
+            z-index: 10;
+            transform: scaleY(1.1);
+        }
+
+        .session-bar.sydney { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+        .session-bar.tokyo { background: linear-gradient(135deg, #f472b6, #db2777); }
+        .session-bar.london { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+        .session-bar.newyork { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+
+        .session-bar.overlap {
+            background: linear-gradient(135deg, #00d4aa, #8b5cf6) !important;
+            font-size: 0.65rem;
+            z-index: 5;
+        }
+
+        .now-marker {
+            position: absolute;
+            top: 0; bottom: 0;
+            width: 2px;
+            background: #fff;
+            z-index: 20;
+            box-shadow: 0 0 10px #fff;
+            transition: left 0.5s ease;
+        }
+
+        .now-marker::before {
+            content: '▼ NOW';
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: #fff;
+            background: #0f172a;
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .timeline-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            padding: 0 5px;
+        }
+
+        .timeline-labels span {
+            font-size: 0.65rem;
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        /* Overlap Info */
+        .overlap-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .overlap-card {
+            background: rgba(30, 41, 59, 0.6);
+            border-radius: 10px;
+            padding: 12px;
+            border-left: 3px solid #8b5cf6;
+        }
+
+        .overlap-card h4 {
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+            color: #c9d1dc;
+        }
+
+        .overlap-card p {
+            font-size: 0.75rem;
+            color: #6b7a90;
+        }
+
+        .overlap-card .time {
+            color: #8b5cf6;
+            font-weight: 600;
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #2d3a4c;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: #8896a8;
+        }
+
+        .legend-dot {
+            width: 12px; height: 12px;
+            border-radius: 3px;
+        }
+
+        /* Market Info Footer */
+        .market-info {
+            background: rgba(17, 24, 39, 0.6);
+            border-radius: 12px;
+            padding: 15px;
+            font-size: 0.8rem;
+            color: #6b7a90;
+            line-height: 1.5;
+        }
+
+        .market-info strong {
+            color: #00d4aa;
+        }
+
+        @media (max-width: 600px) {
+            .time-bar-header { flex-direction: column; text-align: center; }
+            .sessions-grid { grid-template-columns: repeat(2, 1fr); }
+            .timeline-track { height: 50px; }
+            .session-bar { font-size: 0.6rem; padding: 0 4px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <header>
+        <h1>🌍 Forex Market Sessions</h1>
+        <div class="subtitle">24/5 Global Currency Market • Live Session Tracker</div>
+    </header>
+
+    <!-- Time Bar -->
+    <div class="time-bar">
+        <div class="time-bar-header">
+            <div class="local-time">
+                <div class="label">Current Time</div>
+                <div class="time" id="currentTime">--:--:--</div>
+                <div class="date" id="currentDate">Loading...</div>
+            </div>
+            <div class="timezone-selector">
+                <label for="tzSelect">View in:</label>
+                <select id="tzSelect">
+                    <option value="local">My Local Time</option>
+                    <option value="UTC">UTC</option>
+                    <option value="America/New_York">New York (ET)</option>
+                    <option value="Europe/London">London (GMT)</option>
+                    <option value="Asia/Tokyo">Tokyo (JST)</option>
+                    <option value="Australia/Sydney">Sydney (AEST)</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Cards -->
+    <div class="sessions-grid" id="sessionsGrid"></div>
+
+    <!-- Timeline Section -->
+    <div class="timeline-section">
+        <h2>📊 24-Hour Session Timeline</h2>
+        <div class="timeline-wrapper">
+            <div class="timeline-labels" id="timelineLabels"></div>
+            <div class="timeline-track" id="timelineTrack">
+                <div class="now-marker" id="nowMarker"></div>
+            </div>
+        </div>
+        <div class="overlap-info" id="overlapInfo"></div>
+        <div class="legend" id="legend"></div>
+    </div>
+
+    <!-- Info Footer -->
+    <div class="market-info">
+        <strong>💡 Forex Market Hours:</strong> The forex market operates 24 hours a day, 
+        5 days a week — opening Sunday 5:00 PM ET and closing Friday 5:00 PM ET. 
+        Liquidity and volatility vary by session. Highest activity occurs during 
+        <strong>session overlaps</strong> (London/New York: 8AM-12PM ET).
+    </div>
+
+</div>
+
+<script>
+// Forex Sessions Configuration (in UTC)
+const SESSIONS = [
+    {
+        id: 'sydney',
+        name: 'Sydney',
+        flag: '🇦🇺',
+        region: 'Pacific',
+        utcOpen: 22, // Sunday 22:00 UTC
+        utcClose: 7, // Monday 07:00 UTC
+        color: '#06b6d4',
+        volatility: 0.4
+    },
+    {
+        id: 'tokyo',
+        name: 'Tokyo',
+        flag: '🇯🇵',
+        region: 'Asia',
+        utcOpen: 0,
+        utcClose: 9,
+        color: '#f472b6',
+        volatility: 0.6
+    },
+    {
+        id: 'london',
+        name: 'London',
+        flag: '🇬🇧',
+        region: 'Europe',
+        utcOpen: 7,
+        utcClose: 16,
+        color: '#fbbf24',
+        volatility: 0.9
+    },
+    {
+        id: 'newyork',
+        name: 'New York',
+        flag: '🇺🇸',
+        region: 'North America',
+        utcOpen: 12,
+        utcClose: 21,
+        color: '#3b82f6',
+        volatility: 0.95
+    }
+];
+
+// Session overlaps (high volatility periods)
+const OVERLAPS = [
+    {
+        name: 'London / New York',
+        sessions: ['london', 'newyork'],
+        utcStart: 12,
+        utcEnd: 16,
+        description: 'Peak liquidity • Major pairs most active'
+    },
+    {
+        name: 'Tokyo / London',
+        sessions: ['tokyo', 'london'],
+        utcStart: 7,
+        utcEnd: 9,
+        description: 'Moderate activity • JPY/EUR pairs'
+    }
+];
+
+function getSelectedTimezone() {
+    const val = document.getElementById('tzSelect').value;
+    return val === 'local' ? Intl.DateTimeFormat().resolvedOptions().timeZone : val;
+}
+
+function getTimeInTZ(date, timezone) {
+    const str = date.toLocaleString('en-US', { timeZone: timezone });
+    return new Date(str);
+}
+
+function formatTimeInTZ(date, timezone, opts = {}) {
+    return date.toLocaleTimeString('en-US', {
+        timeZone: timezone,
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: true, ...opts
+    });
+}
+
+function formatDateInTZ(date, timezone) {
+    return date.toLocaleDateString('en-US', {
+        timeZone: timezone,
+        weekday: 'long', month: 'short', day: 'numeric', year: 'numeric'
+    });
+}
+
+function isSessionActive(session, viewTZ) {
+    const now = new Date();
+    const viewTime = getTimeInTZ(now, viewTZ);
+    const viewHour = viewTime.getUTCHours() + viewTime.getUTCMinutes() / 60;
+
+    // Handle overnight sessions
+    if (session.utcClose < session.utcOpen) {
+        return viewHour >= session.utcOpen || viewHour < session.utcClose;
+    }
+    return viewHour >= session.utcOpen && viewHour < session.utcClose;
+}
+
+function getSessionDisplayHours(session, viewTZ) {
+    // Convert UTC hours to view timezone
+    const ref = new Date(Date.UTC(2024, 0, 1, session.utcOpen));
+    const refClose = new Date(Date.UTC(2024, 0, 1, session.utcClose));
+    
+    const openStr = ref.toLocaleTimeString('en-US', { 
+        timeZone: viewTZ, hour: '2-digit', minute: '2-digit', hour12: true 
+    });
+    const closeStr = refClose.toLocaleTimeString('en-US', { 
+        timeZone: viewTZ, hour: '2-digit', minute: '2-digit', hour12: true 
+    });
+    
+    return `${openStr} – ${closeStr}`;
+}
+
+function getCountdown(session, viewTZ) {
+    const now = new Date();
+    const viewTime = getTimeInTZ(now, viewTZ);
+    const currentMinutes = viewTime.getUTCHours() * 60 + viewTime.getUTCMinutes();
+    
+    const openMin = session.utcOpen * 60;
+    const closeMin = session.utcClose * 60;
+    
+    const isActive = isSessionActive(session, viewTZ);
+    
+    if (isActive) {
+        const minsLeft = closeMin - currentMinutes;
+        if (minsLeft <= 0) return 'Closing soon';
+        const h = Math.floor(minsLeft / 60);
+        const m = minsLeft % 60;
+        return `Closes in ${h > 0 ? h + 'h ' : ''}${m}m`;
+    } else {
+        let minsUntil = openMin - currentMinutes;
+        if (minsUntil < 0) minsUntil += 24 * 60;
+        const h = Math.floor(minsUntil / 60);
+        const m = minsUntil % 60;
+        return `Opens in ${h > 0 ? h + 'h ' : ''}${m}m`;
+    }
+}
+
+function renderSessionCards() {
+    const grid = document.getElementById('sessionsGrid');
+    const viewTZ = getSelectedTimezone();
+    
+    grid.innerHTML = SESSIONS.map(session => {
+        const active = isSessionActive(session, viewTZ);
+        return `
+            <div class="session-card ${active ? 'active' : ''}">
+                <div class="session-name">
+                    <span class="session-flag">${session.flag}</span>
+                    ${session.name}
+                </div>
+                <div class="session-region">${session.region}</div>
+                <div class="session-status ${active ? 'open' : 'closed'}">
+                    ${active ? '<span class="pulse"></span>Open' : 'Closed'}
+                </div>
+                <div class="session-hours">
+                    <strong>${getSessionDisplayHours(session, viewTZ)}</strong><br>
+                    <small style="color:#4a5568">UTC: ${session.utcOpen}:00–${session.utcClose}:00</small>
+                </div>
+                <div class="session-volatility">
+                    Volatility: ${Math.round(session.volatility * 100)}%
+                    <div class="volatility-bar">
+                        <div class="volatility-fill" style="width:${session.volatility * 100}%; background:${session.color}"></div>
+                    </div>
+                </div>
+                <div style="font-size:0.7rem; color:#4a5568; margin-top:8px">${getCountdown(session, viewTZ)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderTimeline() {
+    const track = document.getElementById('timelineTrack');
+    const labels = document.getElementById('timelineLabels');
+    const legend = document.getElementById('legend');
+    const overlapInfo = document.getElementById('overlapInfo');
+    const viewTZ = getSelectedTimezone();
+    
+    // Clear existing
+    track.querySelectorAll('.session-bar, .overlap-bar').forEach(el => el.remove());
+    
+    // Time labels (every 4 hours)
+    labels.innerHTML = Array.from({length: 7}, (_, i) => {
+        const hour = i * 4;
+        const date = new Date(Date.UTC(2024, 0, 1, hour));
+        return `<span>${date.toLocaleTimeString('en-US', { timeZone: viewTZ, hour: '2-digit', hour12: true })}</span>`;
+    }).join('');
+    
+    // Render session bars
+    SESSIONS.forEach(session => {
+        const left = (session.utcOpen / 24) * 100;
+        let width = ((session.utcClose - session.utcOpen + 24) % 24) / 24 * 100;
+        
+        // Handle overnight
+        if (session.utcClose < session.utcOpen) {
+            // Split into two bars
+            const bar1 = document.createElement('div');
+            bar1.className = `session-bar ${session.id}`;
+            bar1.style.left = `${left}%`;
+            bar1.style.width = `${(24 - session.utcOpen) / 24 * 100}%`;
+            bar1.textContent = session.name;
+            track.appendChild(bar1);
+            
+            const bar2 = document.createElement('div');
+            bar2.className = `session-bar ${session.id}`;
+            bar2.style.left = '0%';
+            bar2.style.width = `${session.utcClose / 24 * 100}%`;
+            bar2.textContent = '';
+            track.appendChild(bar2);
+        } else {
+            const bar = document.createElement('div');
+            bar.className = `session-bar ${session.id}`;
+            bar.style.left = `${left}%`;
+            bar.style.width = `${width}%`;
+            bar.textContent = session.name;
+            bar.title = `${session.name}: ${getSessionDisplayHours(session, viewTZ)}`;
+            track.appendChild(bar);
+        }
+    });
+    
+    // Render overlap highlights
+    OVERLAPS.forEach(overlap => {
+        const left = (overlap.utcStart / 24) * 100;
+        const width = ((overlap.utcEnd - overlap.utcStart) / 24) * 100;
+        
+        const bar = document.createElement('div');
+        bar.className = 'session-bar overlap';
+        bar.style.left = `${left}%`;
+        bar.style.width = `${width}%`;
+        bar.style.top = '6px';
+        bar.style.height = '48px';
+        bar.textContent = `★ ${overlap.name}`;
+        bar.title = `${overlap.description}`;
+        track.appendChild(bar);
+    });
+    
+    // Now marker
+    updateNowMarker();
+    
+    // Legend
+    legend.innerHTML = SESSIONS.map(s => 
+        `<div class="legend-item"><div class="legend-dot" style="background:${s.color}"></div>${s.name}</div>`
+    ).join('') + 
+    `<div class="legend-item"><div class="legend-dot" style="background:linear-gradient(135deg,#00d4aa,#8b5cf6)"></div>Overlap (High Volatility)</div>`;
+    
+    // Overlap info cards
+    overlapInfo.innerHTML = OVERLAPS.map(o => {
+        const start = new Date(Date.UTC(2024,0,1,o.utcStart)).toLocaleTimeString('en-US', { timeZone: viewTZ, hour: '2-digit', hour12: true });
+        const end = new Date(Date.UTC(2024,0,1,o.utcEnd)).toLocaleTimeString('en-US', { timeZone: viewTZ, hour: '2-digit', hour12: true });
+        return `
+            <div class="overlap-card">
+                <h4>✨ ${o.name}</h4>
+                <p><span class="time">${start}–${end}</span> ${viewTZ}</p>
+                <p style="margin-top:4px">${o.description}</p>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateNowMarker() {
+    const now = new Date();
+    const viewTime = getTimeInTZ(now, getSelectedTimezone());
+    const minutes = viewTime.getUTCHours() * 60 + viewTime.getUTCMinutes() + viewTime.getUTCSeconds() / 60;
+    const percent = (minutes / (24 * 60)) * 100;
+    document.getElementById('nowMarker').style.left = `${percent}%`;
+}
+
+function updateClock() {
+    const now = new Date();
+    const tz = getSelectedTimezone();
+    
+    document.getElementById('currentTime').textContent = 
+        formatTimeInTZ(now, tz, { second: '2-digit' });
+    
+    document.getElementById('currentDate').textContent = 
+        `${formatDateInTZ(now, tz)} • ${tz}`;
+}
+
+function refreshAll() {
+    updateClock();
+    renderSessionCards();
+    renderTimeline();
+    updateNowMarker();
+}
+
+// Event listeners
+document.getElementById('tzSelect').addEventListener('change', refreshAll);
+
+// Initial render + live updates
+refreshAll();
+setInterval(refreshAll, 1000);
+
+// Handle window resize for timeline
+window.addEventListener('resize', () => {
+    renderTimeline();
+});
+</script>
+
+</body>
+</html>

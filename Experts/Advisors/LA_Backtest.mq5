@@ -74,6 +74,14 @@ CMyPanel MyUI;
 ulong lastPositionID = 0;
 ulong lastOpenPositionID = 0; // Track last opened position to avoid duplicate notifications
 
+// Global variables to track the state
+bool isMeasuring = false;
+datetime anchorTime = 0;
+double anchorPrice = 0;
+string rectName = line_prefix + "MeasureRect";
+string labelName = line_prefix + "MeasureLabel";
+int last_barindex = -1; // To track the last bar index we processed in mouse move
+
 //+------------------------------------------------------------------+
 //| Debug print function                                            |
 //+------------------------------------------------------------------+
@@ -170,6 +178,45 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          DaysToShow = (int)StringToInteger(MyUI.txtS1Days.Text());
          Draw_S1_Lines(now, DaysToShow);
       }
+
+      bool altPressed = (TerminalInfoInteger(TERMINAL_KEYSTATE_MENU) < 0);
+
+      // --- 1. START MEASURING (Equivalent to Mouse Down) ---
+      if (altPressed && !isMeasuring)
+      {
+         int x = (int)lparam;
+         int y = (int)dparam;
+         int sub_win = 0;
+
+         // int sub_window = 0;
+         if (ChartXYToTimePrice(0, x, y, sub_win, anchorTime, anchorPrice))
+         {
+            // Snap to nearest Bar High/Low
+            int bar_index = iBarShift(_Symbol, _Period, anchorTime);
+            anchorPrice = (anchorPrice > iOpen(_Symbol, _Period, bar_index)) ? iHigh(_Symbol, _Period, bar_index) : iLow(_Symbol, _Period, bar_index);
+            anchorPrice = iOpen(_Symbol, _Period, bar_index);
+
+            isMeasuring = true;
+            last_barindex = bar_index; // Initialize last processed bar index
+
+            ObjectCreate(0, rectName, OBJ_RECTANGLE, 0, anchorTime, anchorPrice, anchorTime, anchorPrice);
+            ObjectSetInteger(0, rectName, OBJPROP_COLOR, clrDodgerBlue);
+            ObjectSetInteger(0, rectName, OBJPROP_FILL, true);
+            ObjectSetInteger(0, rectName, OBJPROP_BGCOLOR, ColorToARGB(clrDodgerBlue, 50));
+            ObjectSetInteger(0, rectName, OBJPROP_BACK, true);
+            ObjectSetInteger(0, rectName, OBJPROP_SELECTABLE, false);
+
+            // Create Screen Label (Fixed Position)
+            ObjectCreate(0, labelName, OBJ_LABEL, 0, 0, 0);
+            ObjectSetInteger(0, labelName, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+            ObjectSetInteger(0, labelName, OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+            ObjectSetInteger(0, labelName, OBJPROP_XDISTANCE, 20); // Pixels from right
+            ObjectSetInteger(0, labelName, OBJPROP_YDISTANCE, 30); // Pixels from top
+            ObjectSetInteger(0, labelName, OBJPROP_COLOR, C'53,1,165');
+            ObjectSetInteger(0, labelName, OBJPROP_FONTSIZE, 12);
+            ObjectSetString(0, labelName, OBJPROP_FONT, "Verdana Bold");
+         }
+      }
       // Print("Chart event: CLICK at X=" + IntegerToString(lparam) + ", Y=" + IntegerToString((long)dparam) + ", Object: " + sparam );
    }
    else if (id == CHARTEVENT_OBJECT_CHANGE)
@@ -183,9 +230,16 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
 
       int x = (int)lparam;
       int y = (int)dparam;
+      uint mouseState = (uint)sparam;
       datetime current_mouse_time;
       double price;
       int sub_window;
+
+      // Check if Left Mouse Button is currently pressed (Bit 1)
+      bool leftButtonPressed = (mouseState & 1) == 1;
+      // Check if ALT key is pressed
+      bool altPressed = (TerminalInfoInteger(TERMINAL_KEYSTATE_MENU) < 0);
+      bool controlPressed = (TerminalInfoInteger(TERMINAL_KEYSTATE_CONTROL) < 0);
 
       // 2. Convert pixels to Time/Price
       if (ChartXYToTimePrice(0, x, y, sub_window, current_mouse_time, price))
@@ -200,6 +254,75 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          {
             // MyUI.ChartEvent(id, lparam, dparam, sparam);
             return;
+         }
+
+         if (altPressed && isMeasuring)
+         {
+            datetime currentTime;
+            double currentPrice;
+            // int sub_window = 0;
+
+            if (ChartXYToTimePrice(0, x, y, sub_window, currentTime, currentPrice))
+            {
+               int barIndex = iBarShift(_Symbol, _Period, currentTime);
+
+               if (barIndex == last_barindex)
+               {
+                  return;
+               }
+
+               last_barindex = barIndex;
+               double snapPrice = 0;
+               if (controlPressed)
+               {
+                  double highPrice, lowPrice;
+                  if(iClose(_Symbol, _Period, barIndex) > iOpen(_Symbol, _Period, barIndex))
+                  {
+                     highPrice = iClose(_Symbol, _Period, barIndex);
+                     lowPrice = iOpen(_Symbol, _Period, barIndex);
+                  }
+                  else
+                  {
+                     highPrice = iOpen(_Symbol, _Period, barIndex);
+                     lowPrice = iClose(_Symbol, _Period, barIndex);
+                  }
+
+                  snapPrice = (currentPrice > anchorPrice) ? highPrice : lowPrice;
+               }
+               else
+               {
+                  snapPrice = (currentPrice > anchorPrice) ? iHigh(_Symbol, _Period, barIndex) : iLow(_Symbol, _Period, barIndex);
+               }
+
+               ObjectMove(0, rectName, 1, currentTime, snapPrice);
+
+               // --- CALCULATIONS ---
+               int anchorBarIdx = iBarShift(_Symbol, _Period, anchorTime);
+               int barsCount = MathAbs(anchorBarIdx - barIndex) + 1;
+
+               double priceDiff = MathAbs(snapPrice - anchorPrice);
+               double pips = priceDiff / _Point;
+               if (_Digits == 3 || _Digits == 5)
+                  pips /= 10;
+
+               // --- UPDATE LABEL ---
+               string info = StringFormat(" Bars: %d | %.0f pips", barsCount - 1, pips);
+
+               // --- UPDATE SCREEN LABEL ---
+               ObjectSetString(0, labelName, OBJPROP_TEXT, info);
+
+               // Optional: Update your C# DLL with the live pip count here
+               // ChartRedraw(0);
+            }
+         }
+
+         // --- 3. STOP MEASURING (Equivalent to Mouse Up) ---
+         else if (!altPressed && isMeasuring)
+         {
+            isMeasuring = false;
+            ObjectDelete(0, rectName);
+            ObjectDelete(0, labelName);
+            // ChartRedraw(0);
          }
 
          // Update the state for the next move
@@ -249,11 +372,11 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
             // MyUI.lblBarInfo2.Text(bar_info2);
             SendStringToDLL(bar_info2, (int)BarData2);
 
-            //send OHCL to C# for potential use in UI or logic
+            // send OHCL to C# for potential use in UI or logic
             string ohcl_info = StringFormat("%.2f,%.2f,%.2f,%.2f", bar.open, bar.high, bar.close, bar.low);
             SendStringToDLL(ohcl_info, (int)BarOHCL);
 
-            if (TrackMouse)
+            if (TrackMouse && !isMeasuring)
             {
                DrawMouseMarker(bar_start_time, bar.high, bar.low);
             }
@@ -940,9 +1063,9 @@ void DrawPeriodLabel(const datetime targetdate, const string text, double price)
    string name = line_prefix + "_Label_" + TimeToString(targetdate, TIME_DATE);
    // Print("+DrawPeriodLabel(): Drawing label '" + text + "' at " + TimeToString(middleTime) + " Price: " + DoubleToString(price, _Digits));
    // 3. Create or Move the Text Object
-   if (!ObjectCreate(0, name, OBJ_TEXT, 0, middleTime, price))
+   if (!ObjectCreate(0, name, OBJ_TEXT, 0, middleTime, price - 300 * _Point))
    {
-      ObjectMove(0, name, 0, middleTime, price);
+      ObjectMove(0, name, 0, middleTime, price - 300 * _Point);
    }
 
    // 4. Set Properties
@@ -1269,8 +1392,8 @@ void DrawMouseMarker(datetime time, double high, double low)
 
    // --- 1. Detect if the bar is near the right edge ---
    int visible_bars = (int)ChartGetInteger(0, CHART_VISIBLE_BARS);
-   int first_bar    = (int)ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR);
-   int last_bar     = first_bar - visible_bars; // The index of the right-most bar
+   int first_bar = (int)ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR);
+   int last_bar = first_bar - visible_bars; // The index of the right-most bar
 
    // Convert the 'time' of our marker back to an index
    int current_bar_index = iBarShift(_Symbol, _Period, time);
@@ -1305,7 +1428,7 @@ void DrawMouseMarker(datetime time, double high, double low)
 
    // Determine bar offset based on period
    int barSeconds = PeriodSeconds(_Period);
-   
+
    // Apply the sideMultiplier here to x_text
    // If normal: x_text is 1 bar to the right. If edge: 1 bar to the left.
    datetime x_text = time + (barSeconds * sideMultiplier);
@@ -1319,9 +1442,9 @@ void DrawMouseMarker(datetime time, double high, double low)
 
    ObjectSetString(0, text_name, OBJPROP_TEXT, StringFormat("%02d:%02d", dt.hour, dt.min));
    ObjectSetInteger(0, text_name, OBJPROP_ALIGN, ALIGN_CENTER);
-   ObjectSetInteger(0, text_name, OBJPROP_READONLY, true);       // Make it act like a label
-   ObjectSetInteger(0, text_name, OBJPROP_COLOR, C'0,139,44');       // Text Color
-   
+   ObjectSetInteger(0, text_name, OBJPROP_READONLY, true);      // Make it act like a label
+   ObjectSetInteger(0, text_name, OBJPROP_COLOR, C'0,139,44'); // Text Color
+
    // Anchor Logic
    ENUM_ANCHOR_POINT anchor = isNearRightEdge ? ANCHOR_RIGHT_LOWER : ANCHOR_LEFT_LOWER;
    ObjectSetInteger(0, text_name, OBJPROP_ANCHOR, anchor);
@@ -2062,7 +2185,7 @@ bool AutoTrade(ENUM_TRADE_DIRECTION direction,
       PrintFormat("Trade executed successfully: %s %.2f lots",
                   direction == TRADE_BUY ? "BUY" : "SELL", lots);
 
-      //Modify the order to ensure SL and TP are set (some brokers require this as a separate step)
+      // Modify the order to ensure SL and TP are set (some brokers require this as a separate step)
       ModifyPosition(ticket, tp_pips, sl_pips);
    }
    else
@@ -2389,23 +2512,23 @@ bool ModifyPosition(ulong ticket, int tp_pips, int sl_pips)
    if (type == POSITION_TYPE_BUY)
    {
       if (sl_pips > 0)
-         sl_price = open_price - (sl_pips /100);
+         sl_price = open_price - (sl_pips / 100);
       if (tp_pips > 0)
-         tp_price = open_price + (tp_pips /100);
+         tp_price = open_price + (tp_pips / 100);
    }
    else // SELL
    {
       if (sl_pips > 0)
-         sl_price = open_price + (sl_pips /100);
+         sl_price = open_price + (sl_pips / 100);
       if (tp_pips > 0)
-         tp_price = open_price - (tp_pips /100);
+         tp_price = open_price - (tp_pips / 100);
    }
 
    sl_price = NormalizeDouble(sl_price, digits);
    tp_price = NormalizeDouble(tp_price, digits);
 
-   bool result =  trade.PositionModify(ticket, sl_price, tp_price);
-   if(!result)
+   bool result = trade.PositionModify(ticket, sl_price, tp_price);
+   if (!result)
    {
       Print("Failed to modify position: ", ticket, " Error: ", GetLastError());
    }
@@ -2973,13 +3096,13 @@ void DrawLine(
 // Core arrow drawing
 //+------------------------------------------------------------------+
 void DrawArrow(
-    string   name,
+    string name,
     datetime time,
-    double   price,
-    bool     isBuy,
-    color    clr,
-    int      size,
-    string   label)
+    double price,
+    bool isBuy,
+    color clr,
+    int size,
+    string label)
 {
    if (ObjectFind(0, name) >= 0)
       ObjectDelete(0, name);
@@ -2988,23 +3111,22 @@ void DrawArrow(
 
    // Use built-in Buy/Sell arrow object types
    ENUM_OBJECT arrowType = isBuy ? OBJ_ARROW_BUY : OBJ_ARROW_SELL;
-   if(isBuy && label == "OPEN") 
+   if (isBuy && label == "OPEN")
       arrowType = OBJ_ARROW_BUY;
-   else if(isBuy && label == "CLOSE") // For closing sell positions, use a different arrow
+   else if (isBuy && label == "CLOSE") // For closing sell positions, use a different arrow
       arrowType = OBJ_ARROW_SELL;
-   else if(!isBuy && label == "OPEN")
+   else if (!isBuy && label == "OPEN")
       arrowType = OBJ_ARROW_SELL;
-   else if(!isBuy && label == "CLOSE")
+   else if (!isBuy && label == "CLOSE")
       arrowType = OBJ_ARROW_BUY;
 
    ObjectCreate(0, name, arrowType, 0, time, price);
-   ObjectSetInteger(0, name, OBJPROP_COLOR,      clr);
-   ObjectSetInteger(0, name, OBJPROP_WIDTH,      size);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, size);
    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, name, OBJPROP_HIDDEN,     true);
-   ObjectSetString(0,  name, OBJPROP_TOOLTIP,
-                   label + " @ " + DoubleToString(price, _Digits)
-                   + "\n" + TimeToString(time, TIME_DATE | TIME_SECONDS));
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+   ObjectSetString(0, name, OBJPROP_TOOLTIP,
+                   label + " @ " + DoubleToString(price, _Digits) + "\n" + TimeToString(time, TIME_DATE | TIME_SECONDS));
    ObjectSetInteger(0, name, OBJPROP_BACK, false); // Draw behind candles
 }
 

@@ -24,6 +24,7 @@ namespace MQLBridge
         private IntPtr _parentHandle = IntPtr.Zero;
         private const int WM_EXITSIZEMOVE = 0x0232;
         private frmTradeHistory _frmTradeHistory;
+        private frmMarketOpenHours _frmMarketOpenHours;
         private CandleInfo _candleInfo;
 
         [DllImport("user32.dll", SetLastError = true)]
@@ -428,8 +429,15 @@ namespace MQLBridge
 
         private void btnMarketHours_Click(object sender, EventArgs e)
         {
-            frmTradingHours frm = new frmTradingHours();
-            frm.Show();
+            //frmTradingHours frm = new frmTradingHours();
+            if(_frmMarketOpenHours == null || _frmMarketOpenHours.IsDisposed)
+            {
+                _frmMarketOpenHours = new frmMarketOpenHours();
+            }
+            _frmMarketOpenHours.Show();
+            _frmMarketOpenHours.parentForm = this;
+            _frmMarketOpenHours.Show();
+            SetParent(_frmMarketOpenHours.Handle, this._parentHandle);
         }
 
         private void frmUI_FormClosed(object sender, FormClosedEventArgs e)
