@@ -92,10 +92,14 @@
             this.lvwTrades.Location = new System.Drawing.Point(3, 95);
             this.lvwTrades.MultiSelect = false;
             this.lvwTrades.Name = "lvwTrades";
+            this.lvwTrades.OwnerDraw = true;
             this.lvwTrades.Size = new System.Drawing.Size(947, 291);
             this.lvwTrades.TabIndex = 0;
             this.lvwTrades.UseCompatibleStateImageBehavior = false;
             this.lvwTrades.View = System.Windows.Forms.View.Details;
+            this.lvwTrades.DrawColumnHeader += new System.Windows.Forms.DrawListViewColumnHeaderEventHandler(this.lvwTrades_DrawColumnHeader);
+            this.lvwTrades.DrawItem += new System.Windows.Forms.DrawListViewItemEventHandler(this.lvwTrades_DrawItem);
+            this.lvwTrades.DrawSubItem += new System.Windows.Forms.DrawListViewSubItemEventHandler(this.lvwTrades_DrawSubItem);
             this.lvwTrades.SelectedIndexChanged += new System.EventHandler(this.lvwTrades_SelectedIndexChanged);
             this.lvwTrades.MouseDoubleClick += new System.Windows.Forms.MouseEventHandler(this.lvwTrades_MouseDoubleClick);
             // 

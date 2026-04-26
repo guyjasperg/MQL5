@@ -194,6 +194,7 @@ namespace MQLBridge
                 {
                     Logger.Info($"Double-clicked trade ticket: {trade.Ticket}");
                     string sParam = $"{trade.Ticket}, {trade.EntryTime:yyyy.MM.dd HH:mm}";
+                    parentForm.dtDate.Value = trade.EntryTime.AddDays(-1);
                     parentForm?.SendUICOmmand((int)UIMessageIDs.GoToTrade, sParam);
                 }
             }
@@ -202,6 +203,42 @@ namespace MQLBridge
         private void frmTradeHistory_FormClosed(object sender, FormClosedEventArgs e)
         {
             parentForm.Activate();
+        }
+
+        private void lvwTrades_DrawItem(object sender, DrawListViewItemEventArgs e)
+        {
+
+        }
+
+        private void lvwTrades_DrawSubItem(object sender, DrawListViewSubItemEventArgs e)
+        {
+            // Define your colors
+            Color selectedColor = Color.DodgerBlue;
+            Color textColor = Color.White;
+
+            if (e.Item.Selected)
+            {
+                // Draw the high-contrast background for selected items
+                e.Graphics.FillRectangle(new SolidBrush(selectedColor), e.Bounds);
+                
+                // Match the text alignment to the column header settings
+                TextFormatFlags flags = TextFormatFlags.VerticalCenter;
+                if (e.Header.TextAlign == HorizontalAlignment.Center) flags |= TextFormatFlags.HorizontalCenter;
+                if (e.Header.TextAlign == HorizontalAlignment.Right) flags |= TextFormatFlags.Right;
+                if (e.Header.TextAlign == HorizontalAlignment.Left) flags |= TextFormatFlags.Left;
+
+                TextRenderer.DrawText(e.Graphics, e.SubItem.Text, e.SubItem.Font, e.Bounds, Color.White, flags);
+            }
+            else
+            {
+                // Draw normal background
+                e.DrawDefault = true;
+            }
+        }
+
+        private void lvwTrades_DrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
+        {
+            e.DrawDefault = true;
         }
     }
 

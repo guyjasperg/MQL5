@@ -39,10 +39,17 @@
             this.lblData2 = new System.Windows.Forms.Label();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.lblBO = new System.Windows.Forms.Label();
+            this.picBar = new System.Windows.Forms.PictureBox();
             this.lblBarTime = new System.Windows.Forms.Label();
             this.chkNotification = new System.Windows.Forms.CheckBox();
             this.label3 = new System.Windows.Forms.Label();
             this.toolTip1 = new System.Windows.Forms.ToolTip(this.components);
+            this.btnMarketHours = new System.Windows.Forms.Button();
+            this.btnShowBuySell = new System.Windows.Forms.Button();
+            this.btnTradeHistory = new System.Windows.Forms.Button();
+            this.btnChartMoveRight = new System.Windows.Forms.Button();
+            this.btnChartMoveLeft = new System.Windows.Forms.Button();
+            this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.btnSell = new System.Windows.Forms.Button();
             this.btnBuy = new System.Windows.Forms.Button();
             this.label4 = new System.Windows.Forms.Label();
@@ -54,20 +61,13 @@
             this.label6 = new System.Windows.Forms.Label();
             this.cboLotSize = new System.Windows.Forms.ComboBox();
             this.lblTimeLeft = new System.Windows.Forms.Label();
-            this.btnMarketHours = new System.Windows.Forms.Button();
-            this.btnShowBuySell = new System.Windows.Forms.Button();
-            this.btnTradeHistory = new System.Windows.Forms.Button();
-            this.btnChartMoveRight = new System.Windows.Forms.Button();
-            this.btnChartMoveLeft = new System.Windows.Forms.Button();
-            this.picBar = new System.Windows.Forms.PictureBox();
             this.btnDayCurrent = new System.Windows.Forms.Button();
             this.btnDayNext = new System.Windows.Forms.Button();
             this.btnDayPrevious = new System.Windows.Forms.Button();
-            this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.groupBox1.SuspendLayout();
-            this.pnlBuySell.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.picBar)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
+            this.pnlBuySell.SuspendLayout();
             this.SuspendLayout();
             // 
             // btnSetDate
@@ -166,6 +166,16 @@
             this.lblBO.Text = "BO 100%";
             this.lblBO.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
+            // picBar
+            // 
+            this.picBar.Location = new System.Drawing.Point(339, 25);
+            this.picBar.Name = "picBar";
+            this.picBar.Size = new System.Drawing.Size(36, 55);
+            this.picBar.TabIndex = 28;
+            this.picBar.TabStop = false;
+            this.picBar.Click += new System.EventHandler(this.picBar_Click);
+            this.picBar.Paint += new System.Windows.Forms.PaintEventHandler(this.picBar_Paint);
+            // 
             // lblBarTime
             // 
             this.lblBarTime.Font = new System.Drawing.Font("Consolas", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
@@ -199,6 +209,88 @@
             this.label3.Size = new System.Drawing.Size(130, 22);
             this.label3.TabIndex = 15;
             this.label3.Text = "Chart Navigation";
+            // 
+            // btnMarketHours
+            // 
+            this.btnMarketHours.BackgroundImage = global::MQLBridge.Properties.Resources.trading;
+            this.btnMarketHours.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.btnMarketHours.FlatAppearance.BorderColor = System.Drawing.SystemColors.Control;
+            this.btnMarketHours.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnMarketHours.Location = new System.Drawing.Point(322, 189);
+            this.btnMarketHours.Name = "btnMarketHours";
+            this.btnMarketHours.Size = new System.Drawing.Size(40, 40);
+            this.btnMarketHours.TabIndex = 27;
+            this.btnMarketHours.TextAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.toolTip1.SetToolTip(this.btnMarketHours, "Trading Market Hours");
+            this.btnMarketHours.UseVisualStyleBackColor = true;
+            this.btnMarketHours.Click += new System.EventHandler(this.btnMarketHours_Click);
+            // 
+            // btnShowBuySell
+            // 
+            this.btnShowBuySell.BackgroundImage = global::MQLBridge.Properties.Resources.left;
+            this.btnShowBuySell.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Zoom;
+            this.btnShowBuySell.Location = new System.Drawing.Point(414, 63);
+            this.btnShowBuySell.Name = "btnShowBuySell";
+            this.btnShowBuySell.Size = new System.Drawing.Size(45, 82);
+            this.btnShowBuySell.TabIndex = 26;
+            this.btnShowBuySell.Tag = "Left";
+            this.toolTip1.SetToolTip(this.btnShowBuySell, "Auto Trade");
+            this.btnShowBuySell.UseVisualStyleBackColor = true;
+            this.btnShowBuySell.Click += new System.EventHandler(this.btnShowBuySell_Click);
+            // 
+            // btnTradeHistory
+            // 
+            this.btnTradeHistory.BackgroundImage = global::MQLBridge.Properties.Resources.features;
+            this.btnTradeHistory.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.btnTradeHistory.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnTradeHistory.FlatAppearance.BorderColor = System.Drawing.SystemColors.Control;
+            this.btnTradeHistory.FlatAppearance.BorderSize = 0;
+            this.btnTradeHistory.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnTradeHistory.Location = new System.Drawing.Point(368, 190);
+            this.btnTradeHistory.Name = "btnTradeHistory";
+            this.btnTradeHistory.Size = new System.Drawing.Size(40, 40);
+            this.btnTradeHistory.TabIndex = 18;
+            this.btnTradeHistory.TextAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.toolTip1.SetToolTip(this.btnTradeHistory, "Trade History");
+            this.btnTradeHistory.UseVisualStyleBackColor = true;
+            this.btnTradeHistory.Click += new System.EventHandler(this.btnTradeHistory_Click);
+            // 
+            // btnChartMoveRight
+            // 
+            this.btnChartMoveRight.BackgroundImage = global::MQLBridge.Properties.Resources.next1;
+            this.btnChartMoveRight.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.btnChartMoveRight.Location = new System.Drawing.Point(208, 190);
+            this.btnChartMoveRight.Name = "btnChartMoveRight";
+            this.btnChartMoveRight.Size = new System.Drawing.Size(40, 40);
+            this.btnChartMoveRight.TabIndex = 17;
+            this.btnChartMoveRight.TextAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.toolTip1.SetToolTip(this.btnChartMoveRight, "Move one bar to the right");
+            this.btnChartMoveRight.UseVisualStyleBackColor = true;
+            this.btnChartMoveRight.Click += new System.EventHandler(this.btnChartMoveRight_Click);
+            // 
+            // btnChartMoveLeft
+            // 
+            this.btnChartMoveLeft.BackgroundImage = global::MQLBridge.Properties.Resources.back;
+            this.btnChartMoveLeft.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.btnChartMoveLeft.Location = new System.Drawing.Point(158, 190);
+            this.btnChartMoveLeft.Name = "btnChartMoveLeft";
+            this.btnChartMoveLeft.Size = new System.Drawing.Size(40, 40);
+            this.btnChartMoveLeft.TabIndex = 16;
+            this.btnChartMoveLeft.TextAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.toolTip1.SetToolTip(this.btnChartMoveLeft, "Move one bar to the left.");
+            this.btnChartMoveLeft.UseVisualStyleBackColor = true;
+            this.btnChartMoveLeft.Click += new System.EventHandler(this.btnChartMoveLeft_Click);
+            // 
+            // pictureBox1
+            // 
+            this.pictureBox1.BackgroundImage = global::MQLBridge.Properties.Resources.line;
+            this.pictureBox1.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.pictureBox1.Location = new System.Drawing.Point(415, 191);
+            this.pictureBox1.Name = "pictureBox1";
+            this.pictureBox1.Size = new System.Drawing.Size(40, 40);
+            this.pictureBox1.TabIndex = 28;
+            this.pictureBox1.TabStop = false;
+            this.toolTip1.SetToolTip(this.pictureBox1, resources.GetString("pictureBox1.ToolTip"));
             // 
             // btnSell
             // 
@@ -322,87 +414,6 @@
             this.lblTimeLeft.Text = "00:00";
             this.lblTimeLeft.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
-            // btnMarketHours
-            // 
-            this.btnMarketHours.BackgroundImage = global::MQLBridge.Properties.Resources.trading;
-            this.btnMarketHours.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.btnMarketHours.FlatAppearance.BorderColor = System.Drawing.SystemColors.Control;
-            this.btnMarketHours.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnMarketHours.Location = new System.Drawing.Point(322, 189);
-            this.btnMarketHours.Name = "btnMarketHours";
-            this.btnMarketHours.Size = new System.Drawing.Size(40, 40);
-            this.btnMarketHours.TabIndex = 27;
-            this.btnMarketHours.TextAlign = System.Drawing.ContentAlignment.TopCenter;
-            this.toolTip1.SetToolTip(this.btnMarketHours, "Trading Market Hours");
-            this.btnMarketHours.UseVisualStyleBackColor = true;
-            this.btnMarketHours.Click += new System.EventHandler(this.btnMarketHours_Click);
-            // 
-            // btnShowBuySell
-            // 
-            this.btnShowBuySell.BackgroundImage = global::MQLBridge.Properties.Resources.left;
-            this.btnShowBuySell.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Zoom;
-            this.btnShowBuySell.Location = new System.Drawing.Point(414, 63);
-            this.btnShowBuySell.Name = "btnShowBuySell";
-            this.btnShowBuySell.Size = new System.Drawing.Size(45, 82);
-            this.btnShowBuySell.TabIndex = 26;
-            this.btnShowBuySell.Tag = "Left";
-            this.toolTip1.SetToolTip(this.btnShowBuySell, "Auto Trade");
-            this.btnShowBuySell.UseVisualStyleBackColor = true;
-            this.btnShowBuySell.Click += new System.EventHandler(this.btnShowBuySell_Click);
-            // 
-            // btnTradeHistory
-            // 
-            this.btnTradeHistory.BackgroundImage = global::MQLBridge.Properties.Resources.features;
-            this.btnTradeHistory.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.btnTradeHistory.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.btnTradeHistory.FlatAppearance.BorderColor = System.Drawing.SystemColors.Control;
-            this.btnTradeHistory.FlatAppearance.BorderSize = 0;
-            this.btnTradeHistory.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnTradeHistory.Location = new System.Drawing.Point(368, 190);
-            this.btnTradeHistory.Name = "btnTradeHistory";
-            this.btnTradeHistory.Size = new System.Drawing.Size(40, 40);
-            this.btnTradeHistory.TabIndex = 18;
-            this.btnTradeHistory.TextAlign = System.Drawing.ContentAlignment.TopCenter;
-            this.toolTip1.SetToolTip(this.btnTradeHistory, "Trade History");
-            this.btnTradeHistory.UseVisualStyleBackColor = true;
-            this.btnTradeHistory.Click += new System.EventHandler(this.btnTradeHistory_Click);
-            // 
-            // btnChartMoveRight
-            // 
-            this.btnChartMoveRight.BackgroundImage = global::MQLBridge.Properties.Resources.next1;
-            this.btnChartMoveRight.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.btnChartMoveRight.Location = new System.Drawing.Point(208, 190);
-            this.btnChartMoveRight.Name = "btnChartMoveRight";
-            this.btnChartMoveRight.Size = new System.Drawing.Size(40, 40);
-            this.btnChartMoveRight.TabIndex = 17;
-            this.btnChartMoveRight.TextAlign = System.Drawing.ContentAlignment.TopCenter;
-            this.toolTip1.SetToolTip(this.btnChartMoveRight, "Move one bar to the right");
-            this.btnChartMoveRight.UseVisualStyleBackColor = true;
-            this.btnChartMoveRight.Click += new System.EventHandler(this.btnChartMoveRight_Click);
-            // 
-            // btnChartMoveLeft
-            // 
-            this.btnChartMoveLeft.BackgroundImage = global::MQLBridge.Properties.Resources.back;
-            this.btnChartMoveLeft.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.btnChartMoveLeft.Location = new System.Drawing.Point(158, 190);
-            this.btnChartMoveLeft.Name = "btnChartMoveLeft";
-            this.btnChartMoveLeft.Size = new System.Drawing.Size(40, 40);
-            this.btnChartMoveLeft.TabIndex = 16;
-            this.btnChartMoveLeft.TextAlign = System.Drawing.ContentAlignment.TopCenter;
-            this.toolTip1.SetToolTip(this.btnChartMoveLeft, "Move one bar to the left.");
-            this.btnChartMoveLeft.UseVisualStyleBackColor = true;
-            this.btnChartMoveLeft.Click += new System.EventHandler(this.btnChartMoveLeft_Click);
-            // 
-            // picBar
-            // 
-            this.picBar.Location = new System.Drawing.Point(339, 25);
-            this.picBar.Name = "picBar";
-            this.picBar.Size = new System.Drawing.Size(36, 55);
-            this.picBar.TabIndex = 28;
-            this.picBar.TabStop = false;
-            this.picBar.Click += new System.EventHandler(this.picBar_Click);
-            this.picBar.Paint += new System.Windows.Forms.PaintEventHandler(this.picBar_Paint);
-            // 
             // btnDayCurrent
             // 
             this.btnDayCurrent.BackgroundImage = global::MQLBridge.Properties.Resources.right;
@@ -441,17 +452,6 @@
             this.btnDayPrevious.UseVisualStyleBackColor = true;
             this.btnDayPrevious.Click += new System.EventHandler(this.btnDayPrevious_Click);
             // 
-            // pictureBox1
-            // 
-            this.pictureBox1.BackgroundImage = global::MQLBridge.Properties.Resources.line;
-            this.pictureBox1.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.pictureBox1.Location = new System.Drawing.Point(415, 191);
-            this.pictureBox1.Name = "pictureBox1";
-            this.pictureBox1.Size = new System.Drawing.Size(40, 40);
-            this.pictureBox1.TabIndex = 28;
-            this.pictureBox1.TabStop = false;
-            this.toolTip1.SetToolTip(this.pictureBox1, resources.GetString("pictureBox1.ToolTip"));
-            // 
             // frmUI
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 22F);
@@ -488,10 +488,10 @@
             this.Load += new System.EventHandler(this.frmUI_Load);
             this.groupBox1.ResumeLayout(false);
             this.groupBox1.PerformLayout();
-            this.pnlBuySell.ResumeLayout(false);
-            this.pnlBuySell.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.picBar)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
+            this.pnlBuySell.ResumeLayout(false);
+            this.pnlBuySell.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -501,7 +501,6 @@
 
         private System.Windows.Forms.Button btnSetDate;
         private System.Windows.Forms.Label label1;
-        private System.Windows.Forms.DateTimePicker dtDate;
         private System.Windows.Forms.Button btnDayPrevious;
         private System.Windows.Forms.Button btnDayNext;
         private System.Windows.Forms.Button btnDayCurrent;
@@ -533,5 +532,6 @@
         private System.Windows.Forms.PictureBox picBar;
         public System.Windows.Forms.Label lblBO;
         private System.Windows.Forms.PictureBox pictureBox1;
+        public System.Windows.Forms.DateTimePicker dtDate;
     }
 }

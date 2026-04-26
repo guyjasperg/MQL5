@@ -123,6 +123,16 @@ int OnInit()
    // Print("DLL Message: ", msg);
    SetChartShift(20);
 
+   int reason = UninitializeReason();
+
+   if(reason == REASON_CHARTCHANGE)
+   {
+      Print("OnInit called: Timeframe or Symbol was changed.");
+      // Perform specific logic for TF changes (e.g., preserving certain variables)
+      //navigate to latest bar
+      ChartNavigate(0, CHART_END,-1);
+   }
+
    Print("-OnInit()");
    return INIT_SUCCEEDED;
 }
@@ -1114,6 +1124,17 @@ datetime GetPreviousTradingDay(datetime source_time)
    }
 
    return prev_day;
+}
+
+datetime GetStartOfDay(datetime source_time)
+{
+   MqlDateTime dt_struct;
+   TimeToStruct(source_time, dt_struct);
+   dt_struct.hour = 0;
+   dt_struct.min = 0;
+   dt_struct.sec = 0;
+
+   return StructToTime(dt_struct);
 }
 
 datetime GetNextTradingDay(datetime source_time)
